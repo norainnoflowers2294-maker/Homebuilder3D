@@ -4,66 +4,58 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>House Atelier | Premium Architectural Studio</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=Playfair+Display:wght@700&display=swap" rel="stylesheet">
+    <title>Home Atelier - 3D Builder</title>
     <style>
-        body { font-family: 'Inter', sans-serif; background-color: #0f1115; color: #e2e8f0; }
-        .serif { font-family: 'Playfair Display', serif; }
-        .glass { background: rgba(30, 41, 59, 0.7); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.1); }
-        .card-hover:hover { transform: translateY(-5px); box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3); }
-        .hidden-screen { display: none !important; }
+        body { margin: 0; overflow: hidden; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #1a1a1a; color: white; }
+        #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 10; }
+        .panel { pointer-events: auto; background: rgba(30, 30, 30, 0.85); backdrop-filter: blur(10px); border: 1px solid #444; color: #ddd; }
+        
+        #toolbar { 
+            position: absolute; left: 10px; top: 10px; bottom: 10px; width: 220px; 
+            display: flex; flex-direction: column; padding: 15px; border-radius: 8px; 
+        }
+        .tool-group { margin-bottom: 20px; }
+        .tool-group label { font-size: 11px; text-transform: uppercase; color: #888; margin-bottom: 8px; display: block; }
+        .tool-btn { 
+            width: 100%; text-align: left; background: #333; border: 1px solid #555; color: #eee; 
+            padding: 8px 12px; margin-bottom: 4px; cursor: pointer; border-radius: 4px; transition: 0.2s; 
+        }
+        .tool-btn:hover { background: #444; border-color: #777; }
+        .tool-btn.active { background: #4a90e2; border-color: #4a90e2; color: white; }
+
+        #view-controls { 
+            position: absolute; top: 10px; right: 10px; display: flex; gap: 8px; 
+        }
+        .view-btn { 
+            background: rgba(30, 30, 30, 0.8); border: 1px solid #444; color: white; 
+            padding: 8px 15px; cursor: pointer; border-radius: 4px; pointer-events: auto;
+        }
+        .view-btn.active { background: #4a90e2; }
+
+        #status-bar { 
+            position: absolute; bottom: 10px; left: 240px; right: 10px; 
+            padding: 5px 15px; font-size: 12px; color: #aaa; border-radius: 4px;
+        }
+
+        #undo-redo { 
+            position: absolute; bottom: 10px; left: 240px; 
+            display: flex; gap: 10px; pointer-events: auto;
+        }
+
+        canvas { display: block; }
     </style>
 </head>
-<body class="min-h-screen">
+<body>
 
-    <!-- NAVIGATION -->
-    <nav class="fixed top-0 w-full z-50 glass px-6 py-4 flex justify-between items-center">
-        <div class="text-2xl serif font-bold tracking-tight text-white">HOUSE <span class="text-blue-400">ATELIER</span></div>
-        <div class="flex gap-6 items-center">
-            <button onclick="showScreen('dashboard')" class="text-sm uppercase tracking-widest text-gray-400 hover:text-white transition">Dashboard</button>
-            <button onclick="openCreateModal()" class="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg text-sm font-semibold transition">Create New House</button>
-        </div>
-    </nav>
-
-    <!-- MAIN CONTENT AREA -->
-    <main class="pt-24 px-6 pb-12 max-w-7xl mx-auto">
-        
-        <!-- DASHBOARD SCREEN -->
-        <div id="screen-dashboard" class="space-y-12">
-            <!-- Welcome Header -->
-            <section class="text-center py-10">
-                <h1 class="text-5xl serif text-white mb-4">Welcome back, Architect.</h1>
-                <p class="text-gray-400 text-lg">Manage your luxury estates and conceptual designs.</p>
-            </section>
-
-            <!-- Recently Opened -->
-            <section>
-                <h2 class="text-xl font-semibold mb-6 flex items-center gap-2">
-                    <span class="w-2 h-6 bg-blue-500 rounded-full"></span> Recently Opened
-                </h2>
-                <div id="recent-grid" class="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <!-- Dynamic Content -->
-                </div>
-            </section>
-
-            <!-- My Projects -->
-            <section>
-                <h2 class="text-xl font-semibold mb-6 flex items-center gap-2">
-                    <span class="w-2 h-6 bg-blue-500 rounded-full"></span> My Projects
-                </h2>
-                <div id="projects-grid" class="grid grid-cols-1 md:grid-cols-4 gap-6">
-                    <!-- Dynamic Content -->
-                </div>
-            </section>
-
-            <!-- Templates Section -->
-            <section class="pt-12">
-                <h2 class="text-3xl serif text-center mb-10">Featured Design Templates</h2>
-                <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-6" id="templates-grid">
-                    <!-- Dynamic Content -->
-                </div>
-            </section>
-        </div>
-
-        <!-- CREATE PROJECT SCREEN (MOD
+    <div id="ui-layer">
+        <div id="toolbar" class="panel">
+            <div class="tool-group">
+                <label>Structure</label>
+                <button class="tool-btn active" onclick="setTool('walls')">Walls</button>
+                <button class="tool-btn" onclick="setTool('floors')">Floors</button>
+                <button class="tool-btn" onclick="setTool('roofs')">Roofs</button>
+            </div>
+            <div class="tool-group">
+                <label>Openings</label>
+                <button class="tool-btn" onclick="setTool('doors')">Doors</button>
+                <button class="tool-btn" onclick="setTool('windows
