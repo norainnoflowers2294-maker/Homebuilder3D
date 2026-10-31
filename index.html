@@ -4,107 +4,66 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>House Atelier | Luxury Architectural Design</title>
-    <link rel="stylesheet" href="style.css">
-    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
-    <script src="https://unpkg.com/lucide@latest"></script>
+    <title>House Atelier | Premium Architectural Studio</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=Playfair+Display:wght@700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #0f1115; color: #e2e8f0; }
+        .serif { font-family: 'Playfair Display', serif; }
+        .glass { background: rgba(30, 41, 59, 0.7); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.1); }
+        .card-hover:hover { transform: translateY(-5px); box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3); }
+        .hidden-screen { display: none !important; }
+    </style>
 </head>
-<body>
-    <div id="app-container">
-        <!-- Navigation Sidebar -->
-        <nav class="sidebar">
-            <div class="brand">
-                <div class="logo-mark">HA</div>
-                <span class="brand-name">House Atelier</span>
-            </div>
-            
-            <ul class="nav-menu">
-                <li class="nav-item active" data-page="dashboard">
-                    <i data-lucide="layout-dashboard"></i>
-                    <span>Dashboard</span>
-                </li>
-                <li class="nav-item" data-page="workspace">
-                    <i data-lucide="pen-tool"></i>
-                    <span>Workspace</span>
-                </li>
-                <li class="nav-item" data-page="projects">
-                    <i data-lucide="folder-kanban"></i>
-                    <span>Projects</span>
-                </li>
-                <li class="nav-item" data-page="settings">
-                    <i data-lucide="settings"></i>
-                    <span>Settings</span>
-                </li>
-            </ul>
+<body class="min-h-screen">
 
-            <div class="sidebar-footer">
-                <div class="user-profile">
-                    <div class="avatar">JD</div>
-                    <div class="user-info">
-                        <span class="name">Julian Design</span>
-                        <span class="role">Principal Architect</span>
-                    </div>
-                </div>
-            </div>
-        </nav>
+    <!-- NAVIGATION -->
+    <nav class="fixed top-0 w-full z-50 glass px-6 py-4 flex justify-between items-center">
+        <div class="text-2xl serif font-bold tracking-tight text-white">HOUSE <span class="text-blue-400">ATELIER</span></div>
+        <div class="flex gap-6 items-center">
+            <button onclick="showScreen('dashboard')" class="text-sm uppercase tracking-widest text-gray-400 hover:text-white transition">Dashboard</button>
+            <button onclick="openCreateModal()" class="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg text-sm font-semibold transition">Create New House</button>
+        </div>
+    </nav>
 
-        <!-- Main Content Area -->
-        <main class="content-area">
-            <!-- Dashboard Page -->
-            <section id="dashboard" class="page active">
-                <header class="page-header">
-                    <h1>Studio Overview</h1>
-                    <p>Welcome back, Julian. Your current projects are awaiting review.</p>
-                </header>
-                
-                <div class="stats-grid">
-                    <div class="stat-card">
-                        <span class="stat-label">Active Projects</span>
-                        <span class="stat-value">12</span>
-                    </div>
-                    <div class="stat-card">
-                        <span class="stat-label">Hours Logged</span>
-                        <span class="stat-value">142h</span>
-                    </div>
-                    <div class="stat-card">
-                        <span class="stat-label">Client Approval</span>
-                        <span class="stat-value">94%</span>
-                    </div>
-                </div>
+    <!-- MAIN CONTENT AREA -->
+    <main class="pt-24 px-6 pb-12 max-w-7xl mx-auto">
+        
+        <!-- DASHBOARD SCREEN -->
+        <div id="screen-dashboard" class="space-y-12">
+            <!-- Welcome Header -->
+            <section class="text-center py-10">
+                <h1 class="text-5xl serif text-white mb-4">Welcome back, Architect.</h1>
+                <p class="text-gray-400 text-lg">Manage your luxury estates and conceptual designs.</p>
+            </section>
 
-                <div class="dashboard-grid">
-                    <div class="recent-activity">
-                        <h3>Recent Activity</h3>
-                        <div class="activity-list">
-                            <div class="activity-item">
-                                <div class="dot"></div>
-                                <span>Villa Aurora: Floor plan updated</span>
-                                <span class="time">2h ago</span>
-                            </div>
-                            <div class="activity-item">
-                                <div class="dot"></div>
-                                <span>The Azure Penthouse: Material palette finalized</span>
-                                <span class="time">5h ago</span>
-                            </div>
-                            <div class="activity-item">
-                                <div class="dot"></div>
-                                <span>Modernist Retreat: Initial site survey complete</span>
-                                <span class="time">Yesterday</span>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="upcoming-deadlines">
-                        <h3>Upcoming Deadlines</h3>
-                        <div class="deadline-item">
-                            <span class="project-name">Villa Aurora</span>
-                            <span class="deadline-date">Oct 24</span>
-                        </div>
-                        <div class="deadline-item">
-                            <span class="project-name">Azure Penthouse</span>
-                            <span class="deadline-date">Oct 28</span>
-                        </div>
-                    </div>
+            <!-- Recently Opened -->
+            <section>
+                <h2 class="text-xl font-semibold mb-6 flex items-center gap-2">
+                    <span class="w-2 h-6 bg-blue-500 rounded-full"></span> Recently Opened
+                </h2>
+                <div id="recent-grid" class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <!-- Dynamic Content -->
                 </div>
             </section>
 
-            <!-- Workspace Page -->
+            <!-- My Projects -->
+            <section>
+                <h2 class="text-xl font-semibold mb-6 flex items-center gap-2">
+                    <span class="w-2 h-6 bg-blue-500 rounded-full"></span> My Projects
+                </h2>
+                <div id="projects-grid" class="grid grid-cols-1 md:grid-cols-4 gap-6">
+                    <!-- Dynamic Content -->
+                </div>
+            </section>
+
+            <!-- Templates Section -->
+            <section class="pt-12">
+                <h2 class="text-3xl serif text-center mb-10">Featured Design Templates</h2>
+                <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-6" id="templates-grid">
+                    <!-- Dynamic Content -->
+                </div>
+            </section>
+        </div>
+
+        <!-- CREATE PROJECT SCREEN (MOD
