@@ -171,7 +171,7 @@ async function doMagicLink() {
   say('Sending your secure sign-in link…');
   try {
     await sendMagicLink(email);
-    say('Sign-in email sent. Open it on this iPhone and tap the sign-in button. HomeCraft will reopen and sign you in automatically.');
+    say('Supabase accepted the sign-in email request. Check your inbox and spam folder. Open the newest HomeCraft email on this iPhone and tap its sign-in link. If no email arrives, the project email sender may be blocking delivery; see the message here if one appears.');
   } catch (e) { say(String((e && e.message) || e)); }
 }
 
