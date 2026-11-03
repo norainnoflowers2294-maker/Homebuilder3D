@@ -6,7 +6,7 @@ import { requestThumb, thumbCached } from './thumbs.js';
 import { FINISHES, FINISH_MAP, ZONE_MATS, ZONE_MAP, POOL_WATERS, POOL_WATER_MAP, getTextureThumb, DESIGNER_COLORS } from './mats.js';
 import { POOL_SHAPES, shelfSlots } from './catalog_extra.js';
 import { View2D } from './view2d.js';
-import { View3D } from './view3d.js';
+import { View3D } from './view3d.js?v=20261103u';
 import { initDrive } from './drive.js';
 import { initDropbox } from './dropbox.js';
 import { initBackendUI } from '../supabase/ui.js?v=20261103s';
