@@ -23,7 +23,7 @@ export class View3D {
     try {
       THREE = await import('three');
     } catch(e) {
-      THREE = await import('https://esm.sh/three@0.160.0');
+      THREE = await import('https://esm.sh/three@0.187.0');
     }
     this.THREE=THREE;
 
@@ -32,7 +32,7 @@ export class View3D {
       const mod = await import('three/examples/jsm/controls/OrbitControls.js');
       OrbitControls = mod.OrbitControls;
     } catch(e) {
-      const mod = await import('https://esm.sh/three@0.160.0/examples/jsm/controls/OrbitControls.js');
+      const mod = await import('https://esm.sh/three@0.187.0/examples/jsm/controls/OrbitControls.js');
       OrbitControls = mod.OrbitControls;
     }
     this.OrbitControls=OrbitControls;
@@ -63,7 +63,7 @@ export class View3D {
         const envMod = await import('three/examples/jsm/environments/RoomEnvironment.js');
         RoomEnvironment = envMod.RoomEnvironment;
       } catch(e) {
-        const envMod = await import('https://esm.sh/three@0.160.0/examples/jsm/environments/RoomEnvironment.js');
+        const envMod = await import('https://esm.sh/three@0.187.0/examples/jsm/environments/RoomEnvironment.js');
         RoomEnvironment = envMod.RoomEnvironment;
       }
       const pmrem=new THREE.PMREMGenerator(renderer);
