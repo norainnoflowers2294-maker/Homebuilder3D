@@ -18,8 +18,9 @@ let clientFor = '';
 function readCfg() {
   let url = '', key = '';
   try {
-    url = (localStorage.getItem(LS_URL) || '').trim().replace(/\/+$/, '');
-    key = (localStorage.getItem(LS_KEY) || '').trim();
+    const disabled = localStorage.getItem(LS_DISABLED) === '1';
+    url = (localStorage.getItem(LS_URL) || (disabled ? '' : DEFAULT_URL)).trim().replace(/\/+$/, '');
+    key = (localStorage.getItem(LS_KEY) || (disabled ? '' : DEFAULT_KEY)).trim();
   } catch (e) {}
   return { url, key };
 }
