@@ -633,6 +633,9 @@ export class View3D {
       const [fc,ft,fr,fm]=FIN[fl.finish||'wood']||FIN.wood;
       const wear=new THREE.Mesh(new THREE.PlaneGeometry(Math.max(0.5,s.w-0.02),Math.max(0.5,s.d-0.02)),
         H.tmat(fc,ft,Math.max(1,Math.round(s.w/2.5)),Math.max(1,Math.round(s.d/2.5)),fr,fm));
+      if(fl.customTextureUrl){
+        try{ const tx=new THREE.TextureLoader().load(fl.customTextureUrl); tx.wrapS=tx.wrapT=THREE.RepeatWrapping; tx.repeat.set(Math.max(1,s.w/2),Math.max(1,s.d/2)); wear.material.map=tx; wear.material.color.set('#ffffff'); wear.material.needsUpdate=true; }catch(e){}
+      }
       wear.rotation.x=-Math.PI/2; wear.position.set(s.cx||0,topY+0.005,s.cz||0);
       wear.receiveShadow=true; g.add(wear);
 
@@ -992,6 +995,7 @@ export class View3D {
     const finMat=(f,fb)=>{
       const F=(f&&f.tex&&FINISH_MAP[f.tex])||null;
       const mm = H.tmat((f&&f.color)||(F&&F.base)||fb||w.color||'#e8e4da', (F&&F.tex)||'wallpaint', Math.max(2,Math.round(L/1.5)), 1, 0.92);
+      if(f?.textureUrl){ try{ const tx=new THREE.TextureLoader().load(f.textureUrl); tx.wrapS=tx.wrapT=THREE.RepeatWrapping; tx.repeat.set(Math.max(1,L/1.5),1); mm.map=tx; mm.color.set('#ffffff'); mm.needsUpdate=true; }catch(e){} }
       mm.transparent = false;
       mm.opacity = 1.0;
       mm.depthWrite = true;
