@@ -1841,7 +1841,7 @@ async function handleMeshFile(file){
   if(!file) return;
   openUploadReview();
   try{
-    const imp=await import('./importer.js');
+    const imp=await import('./importer.js?v=20261103d');
     const res=await imp.importModelFile(file,app.view3d.THREE,p=>setUploadStatus('<div class="spin" style="margin:8px auto"></div>'+p));
     app._upload={file,res,imp,guess:imp.guessFromName(res.baseName)};
     fillUploadReview(res);
@@ -2084,7 +2084,7 @@ app.loadCustomTemplate=async function(rec){
     let obj=null;
     if(rec.sidecars){
       // optimizer failed at import: rebuild from preserved original + sidecars
-      const imp=await import('./importer.js');
+      const imp=await import('./importer.js?v=20261103d');
       const files=[];
       for(const s of rec.sidecars){
         const b=s.dataUrl?Uint8Array.from(atob(s.dataUrl.split(',')[1]),c=>c.charCodeAt(0)):await customBytes({kvKey:s.kvKey});
