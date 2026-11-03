@@ -7,18 +7,17 @@
 <meta name="description" content="Luxury architectural design studio and 3D home builder with 2D plan and 3D walk modes, infinite floors, procedural textures, and AI tools.">
 <meta property="og:title" content="Home Design 3D">
 <meta property="og:description" content="Luxury architectural design studio and 3D home builder with 2D plan and 3D walk modes, infinite floors, procedural textures, and AI tools.">
-<!-- Fast Local Three.js Import Map -->
+<!-- GitHub Pages-safe Three.js import map. Pin one version across the renderer and addons. -->
 <script type="importmap">
 {
   "imports": {
-    "three": "/node_modules/three/build/three.module.js",
-    "three/": "/node_modules/three/",
-    "three/addons/": "/node_modules/three/examples/jsm/",
-    "three/examples/jsm/": "/node_modules/three/examples/jsm/"
+    "three": "https://esm.sh/three@0.187.0",
+    "three/": "https://esm.sh/three@0.187.0/",
+    "three/addons/": "https://esm.sh/three@0.187.0/examples/jsm/",
+    "three/examples/jsm/": "https://esm.sh/three@0.187.0/examples/jsm/"
   }
 }
 </script>
-<link rel="modulepreload" href="/node_modules/three/build/three.module.js">
 <!-- Official Google Identity & API Scripts -->
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
