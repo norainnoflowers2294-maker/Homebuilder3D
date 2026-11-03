@@ -1993,15 +1993,14 @@ async function draftVeraPrompt(){
   const tips=$('#veraTips');
   tips.textContent='AI is drafting your Vera prompt…';
   try{
-    const gen=globalThis.root?.generateText;
-    if(!gen) throw new Error('AI unavailable');
+    const gen=generateOpenRouterText;
     const base='You are a 3D-model prompt engineer for EvolveLAB Veras (turns images/descriptions into textured 3D meshes). The user wants custom furniture for a home-design app (units: meters, game-ready, centered, upright, clean quad-ish topology, PBR textures, no background, no people, single object).\nUser description: '+(desc||'(see reference photos)')+'\nReturn STRICT JSON only (no markdown): {"prompt":"one rich paragraph Vera prompt: object, materials, colors, proportions in meters, style, details, studio lighting","negative":"things to avoid: text, watermark, people, extra objects, blurry, broken geometry","settings":"recommended Vera settings in one line","importTips":"one line: export as GLB under ~20MB, then import via the app\'s Upload 3D mesh"}';
     let out;
     if(app.veraPhotos.length){
       const parts=[base];
       for(const f of app.veraPhotos.slice(0,3)) parts.push(f);
-      try{ out=await gen({instruction:parts}); }
-      catch(e){ console.warn('multi-photo failed, retry single',e); out=await gen({instruction:[base,app.veraPhotos[0]]}); }
+      try{ out=(await analyzeBlueprintImage(app.veraPhotos[0],parts.join('\n\n'))).text; }
+      catch(e){ console.warn('reference-photo analysis failed',e); throw e; }
     } else out=await gen(base);
     const raw=typeof out==='string'?out:(out?.text||out?.content||JSON.stringify(out));
     const m=String(raw).match(/\{[\s\S]*\}/);
