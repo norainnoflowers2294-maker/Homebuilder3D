@@ -12,7 +12,7 @@ import { initDropbox } from './dropbox.js';
 import { initBackendUI } from '../supabase/ui.js';
 import { googleAuth } from './google_auth.js';
 import { sound } from './sound.js';
-import { OPENROUTER_MODELS, getBlueprintModel, setBlueprintModel, testOpenRouterConnection } from './openrouter.js';
+import { OPENROUTER_MODELS, getBlueprintModel, setBlueprintModel, testOpenRouterConnection, fetchOpenRouterModels, generateOpenRouterText, analyzeBlueprintImage } from './openrouter.js';
 
 const $=s=>document.querySelector(s);
 function toast(m,ms=2200){ const t=$('#toast'); t.textContent=m; t.style.display='block'; clearTimeout(t._h); t._h=setTimeout(()=>t.style.display='none',ms); }
@@ -1858,13 +1858,12 @@ async function aiIdentifyUpload(silent){
   if(!up?.res) return;
   if(!silent) setUploadStatus('<div class="spin" style="margin:8px auto"></div>AI is looking at your model…');
   try{
-    const gen=globalThis.root?.generateText;
-    if(!gen) throw new Error('AI unavailable');
+    const gen=generateOpenRouterText;
     let blob=null;
     if(up.res.thumb) blob=await (await fetch(up.res.thumb)).blob();
     const cats=(await import('./catalog.js')).CATEGORIES.map(c=>c.id).filter(c=>c!=='custom').join(', ');
     const prompt='You are a furniture cataloguer for a home-design app. Look at this 3D model preview render and return STRICT JSON only (no markdown, no commentary): {"name":"short product name","category":"one of: '+cats+'","subcategory":"short","room":"best room","description":"one sentence"}. File was named "'+up.res.baseName+'". If unsure, guess the closest furniture category.';
-    const out=blob?await gen({instruction:[prompt,blob]}):await gen(prompt);
+    const out=blob?((await analyzeBlueprintImage(blob,prompt)).text):await gen(prompt);
     const raw=typeof out==='string'?out:(out?.text||out?.content||JSON.stringify(out));
     const m=String(raw).match(/\{[\s\S]*\}/);
     if(!m) throw new Error('bad AI reply');
@@ -1906,8 +1905,7 @@ async function draftRoomDesign(){
   $('#designPlace').hidden=true; $('#designPaint').hidden=true;
   app._design=null;
   try{
-    const gen=globalThis.root?.generateText;
-    if(!gen) throw new Error('AI unavailable');
+    const gen=generateOpenRouterText;
     const cx=(rect.x0+rect.x1)/2, cz=(rect.z0+rect.z1)/2;
     const W=rect.x1-rect.x0, D=rect.z1-rect.z0;
     const wallFin=[...new Set(wallsInRect(fl,rect).map(w=>w.finish?.tex||'plain '+w.color))].slice(0,4).join(', ');
@@ -2162,8 +2160,7 @@ async function asAsk(){
   try{
     const st=app.state, fl=st.floors[st.activeFloor]||{};
     const ctx='House "'+app.projectName()+'": '+st.floors.length+' floor(s). Current floor "'+(fl.name||'')+'": '+(fl.walls||[]).length+' walls, '+(fl.openings||[]).length+' openings, '+(fl.items||[]).length+' furniture items, '+((fl.zones||[]).length)+' surfaces, '+((fl.pools||[]).length)+' pools.';
-    const gen=globalThis.root&&globalThis.root.generateText;
-    if(!gen) throw new Error('no-ai');
+    const gen=generateOpenRouterText;
     const ans=await gen({instruction:'You are the HomeCraft 3D in-app design assistant. Answer briefly (2-5 sentences, plain text, no emoji). App context: '+ctx+'\nUser question: '+q});
     typing.textContent=String((ans&&ans.text)||ans||'');
   }catch(e){ typing.textContent='The assistant is unavailable right now. Try Room AI Designer or Help in the menu.'; }
@@ -2492,11 +2489,16 @@ function wire(){
   // OpenRouter model preference is stored on this device and used by blueprint AI calls.
   const aiModelSel=$('#openRouterModelSel'), aiModelStatus=$('#openRouterModelStatus'), aiModelTest=$('#openRouterTestBtn');
   if(aiModelSel){
-    aiModelSel.innerHTML=OPENROUTER_MODELS.map(m=>'<option value="'+m.id+'">'+m.label+'</option>').join('');
-    aiModelSel.value=getBlueprintModel();
+    aiModelSel.innerHTML='<option value="'+getBlueprintModel()+'">Loading free models…</option>';
+    fetchOpenRouterModels().then(models=>{
+      aiModelSel.innerHTML=models.map(m=>'<option value="'+m.id+'">'+m.label+' · Free</option>').join('');
+      aiModelSel.value=getBlueprintModel();
+      if(!models.some(m=>m.id===aiModelSel.value)){ const opt=document.createElement('option'); opt.value=getBlueprintModel(); opt.textContent=getBlueprintModel()+' · Saved selection'; aiModelSel.prepend(opt); }
+      if(aiModelStatus) aiModelStatus.textContent=models.length+' free OpenRouter models loaded. Selected model is used by HomeCraft AI text tools and blueprint analysis.';
+    }).catch(err=>{ if(aiModelStatus) aiModelStatus.textContent='Could not load model list: '+String(err.message||err); });
     aiModelSel.onchange=()=>{
       const selected=setBlueprintModel(aiModelSel.value);
-      if(aiModelStatus) aiModelStatus.textContent='Saved. New blueprint AI requests will use '+(OPENROUTER_MODELS.find(m=>m.id===selected)?.label||selected)+'.';
+      if(aiModelStatus) aiModelStatus.textContent='Saved. New HomeCraft AI requests will use '+(OPENROUTER_MODELS.find(m=>m.id===selected)?.label||selected)+'.';
       toast('OpenRouter model saved');
     };
   }
