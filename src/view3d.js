@@ -319,7 +319,16 @@ export class View3D {
     const up=e=>{
       if(this._downPos && !this._moved){ this.tap(e.clientX,e.clientY); }
       this._downPos=null;
-      if(this._drag3d){ this._drag3d=null; if(this.mode==='orbit') this.controls.enabled=true; this.hideGhost(); this.app.live(); }
+      if(this._drag3d){
+        const moved=this._moved, d=this._drag3d;
+        this._drag3d=null;
+        if(this.mode==='orbit') this.controls.enabled=true;
+        this.hideGhost();
+        // A drag used to leave selection in quiet mode, hiding the object action bar.
+        // Re-select normally after the move so Delete / Rotate / Duplicate stay available.
+        if(moved && d.it) this.app.select({type:'item',id:d.it.id,floor:d.floor});
+        this.app.live();
+      }
     };
     cv.addEventListener('pointerup',up); cv.addEventListener('pointercancel',()=>{this._downPos=null; this._drag3d=null;});
     window.addEventListener('keydown',e=>{
