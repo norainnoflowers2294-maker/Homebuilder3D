@@ -1,10 +1,15 @@
 // Secure OpenRouter client for HomeCraft 3D blueprint analysis.
 import { getClient, isBackendConfigured } from '../supabase/client.js';
 export const DEFAULT_BLUEPRINT_MODEL = 'deepseek/deepseek-v4.1-flash';
+export const OPENROUTER_MODELS = [
+  { id: 'deepseek/deepseek-v4.1-flash', label: 'DeepSeek V4.1 Flash · Default' },
+  { id: 'z-ai/glm-5.3-flash', label: 'GLM 5.3 Flash' },
+  { id: 'qwen/qwen3.8-flash', label: 'Qwen 3.8 Flash' }
+];
 const MODEL_KEY = 'hc.openrouter.blueprintModel';
 export function getBlueprintModel(){ try { return localStorage.getItem(MODEL_KEY) || DEFAULT_BLUEPRINT_MODEL; } catch(e){ return DEFAULT_BLUEPRINT_MODEL; } }
 export function setBlueprintModel(model){
-  const allowed=['deepseek/deepseek-v4.1-flash','z-ai/glm-5.3-flash','qwen/qwen3.8-flash'];
+  const allowed=OPENROUTER_MODELS.map(item=>item.id);
   const value=allowed.includes(model)?model:DEFAULT_BLUEPRINT_MODEL;
   try { localStorage.setItem(MODEL_KEY,value); } catch(e) {}
   return value;
