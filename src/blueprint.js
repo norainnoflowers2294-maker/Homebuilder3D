@@ -1,5 +1,6 @@
 // AI blueprint → editable house shell wizard.
 import { uid } from './store.js';
+import { analyzeBlueprintImage, generateBlueprintText, testOpenRouterConnection, getBlueprintModel, setBlueprintModel } from './openrouter.js';
 
 const PROMPT = `You are an architectural plan digitizer. The attached image (LAST item) is a house floor plan or blueprint.
 Return STRICT JSON only — no markdown fences, no commentary:
@@ -53,7 +54,9 @@ export class AIBuilder {
   stepUpload(){
     this.box(`<h3>Step 1 — Upload blueprint <i style="opacity:.6">or</i> describe</h3>
       <p>PNG, JPG, WEBP or PDF (first page). Scanned plans and screenshots both work.</p>
-      <div class="stepBtns"><button class="btn primary" id="aiPick"><i data-lucide="upload"></i>Choose file</button></div>
+      <label class="f">Vision model <select id="aiModel"><option value="deepseek/deepseek-v4.1-flash">DeepSeek V4.1 Flash</option><option value="z-ai/glm-5.3-flash">GLM 5.3 Flash</option><option value="qwen/qwen3.8-flash">Qwen 3.8 Flash</option></select></label>
+       <div class="stepBtns"><button class="btn primary" id="aiPick"><i data-lucide="upload"></i>Choose file</button><button class="btn" id="aiTestOpenRouter">Test OpenRouter</button></div>
+       <p id="aiOpenRouterStatus" class="sub">OpenRouter runs through your secure Supabase backend. Your API key is never stored in this page.</p>
       <div id="aiPrevWrap"></div>
       <h3 style="margin-top:10px">Or describe a house</h3>
       <p>E.g. “2-bed bungalow, open living-kitchen, 10×8m, front door south, patio doors to garden”.</p>
@@ -81,11 +84,9 @@ export class AIBuilder {
     const t0=Date.now();
     const tick=setInterval(()=>{ const s=el('#aiStat'); if(s) s.textContent=`Analyzing blueprint… ${Math.round((Date.now()-t0)/1000)}s`; },1000);
     try{
-      const gen=globalThis.root?.generateText;
-      if(!gen) throw new Error('AI plugin not ready — reload and retry');
       if(!(this.blob instanceof Blob)||!/^image\/(png|jpeg|webp)$/.test(this.blob.type)) throw new Error('Plan image missing — re-upload the file (PNG/JPG/WEBP/PDF).');
-      const res=await gen({instruction:[PROMPT,this.blob]});
-      const txt=String(res?.text??res);
+      const result=await analyzeBlueprintImage(this.blob,PROMPT,getBlueprintModel());
+      const txt=String(result.text||'');
       clearInterval(tick);
       const m=txt.match(/\{[\s\S]*\}/);
       if(!m) throw new Error('AI returned no JSON. Raw: '+txt.slice(0,300));
@@ -107,14 +108,12 @@ export class AIBuilder {
     if(desc.length<10){ toast('Describe the house in a sentence or two first'); return; }
     this.box(`<h3>Step 2 — AI designing</h3><p id="aiStat">Designing your house… (up to ~1 min)</p><div class="spin"></div>`);
     try{
-      const gen=globalThis.root?.generateText;
-      if(!gen) throw new Error('AI plugin not ready — reload and retry');
       const prompt=`You are an architect producing a starter house shell for a home-design app. User description: "${desc.replace(/"/g,'')}"
 Return STRICT JSON only (no markdown, no commentary):
 {"walls":[{"x1":m,"z1":m,"x2":m,"z2":m}],"openings":[{"wall":<wall index>,"at":0.0-1.0,"w":m,"h":m,"sill":m,"kind":"door|window|arch"}],"rooms":[{"name":str,"x":m,"z":m}],"uncertain":[]}
 Rules: meters, any origin (top-down, +x right, +z down). Exterior rectangle + interior divisions for the requested rooms. Split walls at every junction/corner. Exterior doors w=0.9-1.6 h=2.1 sill=0 kind=door; windows w=1.2-1.8 h=1.2 sill=0.9; room doorways w=0.9 h=2.1 sill=0. 3-16 walls. Room x/z = center. Output JSON only.`;
-      const res=await gen(prompt);
-      const m=String(res?.text??res).match(/\{[\s\S]*\}/);
+      const res=await generateBlueprintText(prompt,getBlueprintModel());
+      const m=String(res.text||'').match(/\{[\s\S]*\}/);
       if(!m) throw new Error('AI returned no JSON. Raw: '+String(res?.text??res).slice(0,200));
       const j=JSON.parse(m[0]);
       if(!Array.isArray(j.walls)||j.walls.length<3) throw new Error('AI drew fewer than 3 walls — describe rooms and sizes more concretely');
@@ -277,8 +276,7 @@ Rules: meters, any origin (top-down, +x right, +z down). Exterior rectangle + in
       const cv=document.createElement('canvas'); cv.width=Math.round(sw); cv.height=Math.round(sh);
       cv.getContext('2d').drawImage(this.cv,sx,sy,sw,sh,0,0,sw,sh);
       const blob=await canvasBlob(cv,'image/jpeg',0.9);
-      const gen=globalThis.root?.generateText;
-      const res=await gen({instruction:[ROOM_PROMPT,blob]});
+      const res=await analyzeBlueprintImage(blob,ROOM_PROMPT,getBlueprintModel());
       const m=String(res?.text??res).match(/\{[\s\S]*\}/);
       if(!m) throw new Error('no JSON');
       const sub=JSON.parse(m[0]);
