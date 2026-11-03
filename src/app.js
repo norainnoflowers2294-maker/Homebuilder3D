@@ -9,7 +9,7 @@ import { View2D } from './view2d.js';
 import { View3D } from './view3d.js';
 import { initDrive } from './drive.js';
 import { initDropbox } from './dropbox.js';
-import { initBackendUI } from '../supabase/ui.js?v=20261103o';
+import { initBackendUI } from '../supabase/ui.js?v=20261103r';
 import { googleAuth } from './google_auth.js';
 import { sound } from './sound.js';
 import { OPENROUTER_MODELS, getBlueprintModel, setBlueprintModel, testOpenRouterConnection, fetchOpenRouterModels, generateOpenRouterText, analyzeBlueprintImage } from './openrouter.js';
