@@ -2492,7 +2492,31 @@ function wire(){
   $('#extBtn').onclick=()=>{ app.view3d.setPreset('exterior'); $('#orbitBtn').classList.add('on'); $('#walkBtn').classList.remove('on'); $('#walkStick').classList.remove('on'); toast('Exterior view'); };
   $('#layersBtn').onclick=e=>{ app.view3d.showAll=!app.view3d.showAll; app.view3d.setShowAll(app.view3d.showAll); e.currentTarget.classList.toggle('on',!app.view3d.showAll); toast(app.view3d.showAll?'Showing all floors':'Current floor only'); };
   $('#shadeBtn').onclick=e=>{ const v=!app.view3d.shadows; app.view3d.setShadows(v); e.currentTarget.classList.toggle('on',v); };
-  $('#saveBtn').onclick=()=>{ saveState(app.state); saveCustom(app.custom); $('#saveState').textContent='Saved '+new Date().toLocaleTimeString(); toast('Saved on this device'); };
+  $('#saveBtn').onclick=async()=>{
+    // Always keep the fast local safety copy, then push the same project to Supabase
+    // when the user has an active Supabase session. Google sign-in alone is separate.
+    saveState(app.state); saveCustom(app.custom);
+    const status=$('#saveState');
+    status.textContent='Saved on this device · checking cloud…';
+    try{
+      const { currentUser } = await import('../supabase/auth.js');
+      const user=await currentUser();
+      if(!user){
+        status.textContent='Saved on this device · cloud sign-in needed';
+        toast('Saved on this device. Sign in to Supabase in Menu → Cloud Sync to save online.',4200);
+        return;
+      }
+      toast('Saving house and uploaded models to cloud…',3000);
+      const { pushProject } = await import('../supabase/projects.js');
+      await pushProject(app,{manual:true});
+      status.textContent='Saved to cloud ✓ '+new Date().toLocaleTimeString();
+      toast('House and uploaded models saved to Supabase ✓');
+    }catch(err){
+      console.warn('cloud save failed',err);
+      status.textContent='Saved on this device · cloud save failed';
+      toast('Local copy saved. Cloud save failed: '+String(err?.message||err),5000);
+    }
+  };
   try{ initDrive(app,toast); }catch(e){ console.warn('drive init failed',e); }
   try{ initDropbox(app,toast); }catch(e){ console.warn('dropbox init failed',e); }
   try{ initBackendUI(app,toast); }catch(e){ console.warn('backend init failed',e); }
