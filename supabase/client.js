@@ -2,7 +2,6 @@
 // Public anon key only (never a service-role key). URL + key live in
 // localStorage (hc.sb.url / hc.sb.key), entered in Settings → Backend.
 // Imported lazily so a blocked CDN or iPhone offline never breaks the app.
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const LS_URL = 'hc.sb.url';
 const LS_KEY = 'hc.sb.key';
@@ -66,6 +65,8 @@ export async function getClient() {
   if (!isBackendConfigured()) throw new Error('Backend not configured — enter your Supabase URL and anon key in Settings → Backend.');
   const tag = url + '|' + key.slice(-8);
   if (!client || clientFor !== tag) {
+    // Load the Supabase SDK only when auth/cloud features are first used.
+    const { createClient } = await import('https://esm.sh/@supabase/supabase-js@2');
     client = createClient(url, key, {
       auth: {
         persistSession: true,
