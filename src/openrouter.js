@@ -1,16 +1,16 @@
 // Secure OpenRouter client for HomeCraft 3D blueprint analysis.
 import { getClient, isBackendConfigured } from '../supabase/client.js';
 export const DEFAULT_BLUEPRINT_MODEL = 'deepseek/deepseek-v4.1-flash';
-export const OPENROUTER_MODELS = [
-  { id: 'deepseek/deepseek-v4.1-flash', label: 'DeepSeek V4.1 Flash · Default' },
-  { id: 'z-ai/glm-5.3-flash', label: 'GLM 5.3 Flash' },
-  { id: 'qwen/qwen3.8-flash', label: 'Qwen 3.8 Flash' }
-];
-const MODEL_KEY = 'hc.openrouter.blueprintModel';
+export let OPENROUTER_MODELS = [{ id: DEFAULT_BLUEPRINT_MODEL, label: 'DeepSeek V4.1 Flash · Default' }];
+export async function fetchOpenRouterModels(){
+  const data=await invoke({action:'models'});
+  OPENROUTER_MODELS=(data.models||[]).map(m=>({id:m.id,label:m.name||m.id,context:m.context_length||0}));
+  return OPENROUTER_MODELS;
+}
+const MODEL_KEY = 'hc.openrouter.model';
 export function getBlueprintModel(){ try { return localStorage.getItem(MODEL_KEY) || DEFAULT_BLUEPRINT_MODEL; } catch(e){ return DEFAULT_BLUEPRINT_MODEL; } }
 export function setBlueprintModel(model){
-  const allowed=OPENROUTER_MODELS.map(item=>item.id);
-  const value=allowed.includes(model)?model:DEFAULT_BLUEPRINT_MODEL;
+  const value=typeof model==='string'&&/^[a-zA-Z0-9._-]+\/[a-zA-Z0-9._:-]+$/.test(model)?model:DEFAULT_BLUEPRINT_MODEL;
   try { localStorage.setItem(MODEL_KEY,value); } catch(e) {}
   return value;
 }
@@ -42,3 +42,7 @@ export async function analyzeBlueprintImage(blob,prompt,model=getBlueprintModel(
 }
 export async function generateBlueprintText(prompt,model=getBlueprintModel()){return invoke({action:'text',model:setBlueprintModel(model),prompt});}
 export async function testOpenRouterConnection(model=getBlueprintModel()){return invoke({action:'test',model:setBlueprintModel(model)});}
+
+export const getOpenRouterModel=getBlueprintModel;
+export const setOpenRouterModel=setBlueprintModel;
+export async function generateOpenRouterText(prompt,model=getBlueprintModel()){const r=await invoke({action:'text',model:setBlueprintModel(model),prompt});return r.text;}
