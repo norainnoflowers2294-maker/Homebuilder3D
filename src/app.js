@@ -2389,7 +2389,7 @@ function wire(){
   $('#aiCloseBtn').onclick=()=>$('#aiVeil').classList.remove('on');
   $('#drawerLSearch').oninput=e=>{ app._qb=e.target.value; app._renderGrid&&app._renderGrid(); };
   $('#drawerRSearch').oninput=e=>{ app._q=e.target.value; app._renderGrid&&app._renderGrid(); };
-  $('#saveBtnTop').onclick=()=>$('#saveBtn').click();
+  const saveBtnTop=$('#saveBtnTop'); if(saveBtnTop) saveBtnTop.onclick=()=>$('#saveBtn').click();
   $('#asBtn').onclick=()=>{ const p=$('#asPanel'); const on=!p.classList.contains('on'); p.classList.toggle('on',on); $('#asBtn').classList.toggle('on',on); if(on&&!$('#asMsgs').children.length) asHello(); };
   $('#asClose').onclick=()=>{ $('#asPanel').classList.remove('on'); $('#asBtn').classList.remove('on'); };
   $('#asForm').onsubmit=e=>{ e.preventDefault(); asAsk(); };
@@ -2637,4 +2637,10 @@ async function boot(){
   });
   toast('Welcome to Home Design 3D');
 }
-boot();
+boot().catch(err=>{
+  console.error('HomeCraft startup failed:',err);
+  const overlay=document.querySelector('#boot');
+  const message=document.querySelector('#bootMsg');
+  if(message) message.textContent='Startup error: '+String(err&&err.message||err||'Unknown error')+'. Please reload the app.';
+  if(overlay) overlay.style.display='flex';
+});
