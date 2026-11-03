@@ -1,0 +1,617 @@
+<!-- Official Google Identity & API Scripts -->
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<!-- HomeCraft 3D — original: home-builder-3d -->
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#f5f1e6; --panel:#fffdf7; --panel2:#f7f2e6; --elev:#efe7d2;
+    --line:#e0d4b4; --line2:#cdbd93;
+    --txt:#1a1611; --dim:#4d4638; --mut:#6e624c; --faint:#9c9076;
+    --gold:#b98a2e; --gold2:#e9c766;
+    --sel:#171410; --selTxt:#e9c766;
+    --dangerBg:#f9e9e4; --dangerLine:#d8a08e; --dangerTxt:#96381f;
+    --r:10px; --sat: env(safe-area-inset-top, 0px); --sab: env(safe-area-inset-bottom, 0px);
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{height:100%; margin:0; overscroll-behavior:none;}
+  body{
+    font-family:Inter,-apple-system,"SF Pro Text","Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+    background:var(--bg); color:var(--txt); text-align:left;
+    overflow:hidden; user-select:none; -webkit-user-select:none;
+    font-size:13px; line-height:1.4;
+  }
+  #app{position:fixed; inset:0; display:flex; flex-direction:column;}
+  .ic{width:13px; height:13px; flex:0 0 auto; vertical-align:-2px;}
+  
+  /* Top bar */
+  #topBar{
+    padding-top:var(--sat);
+    background:#fffdf7;
+    border-bottom:1px solid var(--line2);
+    box-shadow:0 1px 0 rgba(185,138,46,.25);
+    display:flex; align-items:center; gap:4px;
+    padding-left:8px; padding-right:8px; padding-bottom:5px;
+    z-index:30; overflow-x:auto; scrollbar-width:none; min-height:44px;
+    flex-wrap:nowrap !important;
+  }
+  #topBar::-webkit-scrollbar{display:none;}
+  #logo{font-weight:800; font-size:12px; white-space:nowrap; flex:0 0 auto; color:var(--txt); display:flex; align-items:center; gap:5px; margin-right:4px;}
+  #logo .mark{width:18px; height:18px; border:1px solid var(--gold); border-radius:5px; display:inline-flex; align-items:center; justify-content:center; font-size:9px; font-weight:800; color:var(--gold); background:linear-gradient(135deg,#fff8e6,#f1e2ba);}
+  #logo small{font-weight:600; color:var(--gold); font-size:9.5px; letter-spacing:1px;}
+  
+  .seg{display:flex; background:var(--panel2); border:1px solid var(--line); border-radius:7px; padding:1.5px; gap:2px; flex:0 0 auto; flex-shrink:0 !important;}
+  .seg button{border:0; background:transparent; color:var(--mut); font-weight:700; font-size:10.5px; padding:4px 8px; border-radius:5px; font-family:inherit; cursor:pointer; white-space:nowrap;}
+  .seg button.on{background:var(--sel); color:var(--selTxt);}
+  
+  #floorPill{display:flex; align-items:center; gap:3px; background:var(--panel2); border:1px solid var(--line); border-radius:7px; padding:2px 2px 2px 6px; font-size:11px; min-width:0; flex:0 0 auto; flex-shrink:0;}
+  #floorPill .ic{width:11px; height:11px; color:var(--mut);}
+  #floorPill .iconBtn{min-width:22px; height:22px; border:0; background:transparent; padding:0;}
+  #floorSel{background:transparent; border:0; color:var(--txt); font-weight:700; font-size:11px; max-width:80px; text-overflow:ellipsis; font-family:inherit; padding:0;}
+  #floorSel option{color:#111;}
+  
+  .iconBtn{border:1px solid var(--line); background:#fff; color:var(--dim); min-width:28px; height:28px; border-radius:7px; display:inline-flex; align-items:center; justify-content:center; flex:0 0 auto; flex-shrink:0; padding:0 4px; font-family:inherit; cursor:pointer;}
+  .iconBtn .ic{width:13px; height:13px;}
+  .iconBtn:active{background:var(--elev);}
+  .iconBtn.on{background:var(--sel); color:var(--selTxt); border-color:var(--sel);}
+  .grow{flex:1;}
+
+  /* Canvas viewports */
+  #views{position:relative; flex:1; overflow:hidden; background:#f5f1e6;}
+  #view2dWrap, #view3dWrap{position:absolute; inset:0;}
+  #view3dWrap[hidden], #view2dWrap[hidden]{display:none;}
+  #planCanvas{position:absolute; inset:0; width:100%; height:100%; touch-action:none; display:block; background:#f5f1e6;}
+  #gl{position:absolute; inset:0; width:100%; height:100%; touch-action:none; display:block;}
+  #hud2d{position:absolute; left:8px; top:8px; display:flex; flex-direction:column; gap:5px; z-index:5;}
+  #view3dWrap::after{content:""; position:absolute; inset:0; pointer-events:none; z-index:4; background:radial-gradient(ellipse at 50% 42%, transparent 58%, rgba(12,9,4,.12) 100%);}
+  
+  #hud3d{position:absolute; right:8px; top:8px; display:flex; flex-direction:column; gap:4px; z-index:15; align-items:flex-end;}
+  .chip{background:rgba(255,253,247,.93); border:1px solid var(--line); border-radius:7px; padding:4px 7px; font-size:10.5px; color:var(--dim); box-shadow:0 2px 6px rgba(96,74,24,.08); backdrop-filter:blur(6px); font-weight:600; display:flex; align-items:center; gap:4px;}
+  .chip b{color:var(--txt); font-weight:700;}
+  .fabRow{display:flex; gap:4px;}
+  .fab{width:32px; height:32px; border-radius:8px; border:1px solid var(--line); background:rgba(255,253,247,.95); color:var(--dim); display:inline-flex; align-items:center; justify-content:center; box-shadow:0 2px 6px rgba(96,74,24,.10); cursor:pointer;}
+  .fab .ic{width:13px; height:13px;}
+  .fab.on{background:var(--sel); color:var(--selTxt); border-color:var(--sel);}
+  
+  #walkStick{position:absolute; left:14px; bottom:14px; width:92px; height:92px; border-radius:50%; border:1.5px solid rgba(26,22,17,.25); background:rgba(26,22,17,.05); z-index:6; touch-action:none; display:none;}
+  #walkStick.on{display:block;}
+  #stickKnob{position:absolute; left:50%; top:50%; width:40px; height:40px; margin:-20px 0 0 -20px; border-radius:50%; background:rgba(23,20,16,.75);}
+
+  /* Drawers and Catalog Grid */
+  .drawer{position:absolute; top:0; bottom:0; width:min(330px,90vw); z-index:24; background:linear-gradient(180deg,#fffdf8 0%,#faf4e6 100%); display:flex; flex-direction:column; transition:transform .24s ease;}
+  .drawer.left{left:0; border-right:1px solid var(--line2); transform:translateX(-103%); box-shadow:12px 0 35px rgba(96,74,24,.18);}
+  .drawer.right{right:0; border-left:1px solid var(--line2); transform:translateX(103%); box-shadow:-12px 0 35px rgba(96,74,24,.18);}
+  .drawer.on{transform:none;}
+  body.focus .drawer{display:none;}
+  body.focus #topBar{display:none;}
+  .drHead{display:flex; align-items:center; gap:8px; padding:12px 10px 8px;}
+  .drHead .mk{width:30px; height:30px; border-radius:8px; background:var(--sel); color:var(--selTxt); display:inline-flex; align-items:center; justify-content:center; flex:0 0 auto;}
+  .drHead .mk .ic{width:14px; height:14px;}
+  .drHead b{display:block; font-size:13px; letter-spacing:.14em; font-weight:800;}
+  .drHead span{display:block; font-size:10.5px; color:var(--mut);}
+  .drSearch{margin:0 10px 6px; position:relative;}
+  .drSearch input{width:100%; background:#fff; border:1px solid var(--line); color:var(--txt); border-radius:8px; padding:7px 9px; font-size:12px; font-family:inherit;}
+  .drChips{display:flex; gap:5px; padding:0 10px 6px; overflow-x:auto; scrollbar-width:none;}
+  .drChips::-webkit-scrollbar{display:none;}
+  .fchip{flex:0 0 auto; border:1px solid var(--line); background:#fff; color:var(--mut); border-radius:6px; padding:4px 8px; font-size:10.5px; font-weight:700; font-family:inherit; cursor:pointer;}
+  .fchip.on{background:var(--sel); color:var(--selTxt); border-color:var(--sel);}
+  .drSecLab{font-size:9px; font-weight:800; letter-spacing:.16em; color:var(--gold); padding:5px 12px 2px;}
+  .drTools{display:grid; grid-template-columns:repeat(3,1fr); gap:5px; padding:3px 10px 6px;}
+  .dtool{display:flex; flex-direction:column; align-items:center; gap:2px; padding:7px 3px 5px; background:#fff; border:1px solid var(--line); border-radius:8px; color:var(--dim); font-size:8.5px; font-weight:700; font-family:inherit; cursor:pointer;}
+  .dtool .ic{width:14px; height:14px;}
+  .dtool.on{background:var(--sel); color:var(--selTxt); border-color:var(--sel);}
+  .drBody{flex:1; overflow-y:auto; padding:4px 10px 18px; scrollbar-width:thin;}
+  
+  /* Proper 2-column square category cards */
+  .catGrid{display:grid !important; grid-template-columns:1fr 1fr !important; gap:8px !important; padding:4px 0 10px !important;}
+  .ctile{
+    display:flex !important; flex-direction:column !important; align-items:center !important; justify-content:center !important; gap:4px !important;
+    background:#fff !important; border:1px solid var(--line) !important; border-radius:10px !important; padding:12px 6px 10px !important;
+    font-family:inherit !important; color:var(--dim) !important; font-size:11.5px !important; font-weight:700 !important;
+    box-shadow:0 1px 4px rgba(96,74,24,.06) !important; text-align:center !important; cursor:pointer !important;
+  }
+  .ctile .ic{width:18px !important; height:18px !important; color:var(--gold) !important;}
+  .ctile small{font-weight:500; color:var(--faint); font-size:9.5px; display:block; margin-top:2px;}
+  .ctile:active{transform:scale(.97);}
+  
+  .itemGrid{display:grid !important; grid-template-columns:1fr 1fr !important; gap:8px !important; padding-bottom:10px !important;}
+  .icard{background:#fff; border:1px solid var(--line); border-radius:10px; overflow:hidden; font-family:inherit; text-align:center; padding:0 0 7px; box-shadow:0 1px 4px rgba(96,74,24,.06); cursor:pointer;}
+  .icard .im{height:76px; background:linear-gradient(135deg,#f4ecd8,#e5d7b4); position:relative; overflow:hidden;}
+  .icard .im img{width:100%; height:100%; object-fit:cover; display:block;}
+  .icard .dnm{font-size:11px; font-weight:700; margin:6px 5px 0; line-height:1.25; color:var(--txt);}
+  .icard .dsz{font-size:9.5px; color:var(--mut); margin-top:1px;}
+  .icard.on{border-color:var(--gold); box-shadow:0 0 0 1px var(--gold); background:#fffaec;}
+  .dback{display:flex; align-items:center; gap:6px; background:none; border:0; color:var(--gold); font-weight:800; font-size:11.5px; padding:6px 0; font-family:inherit; cursor:pointer;}
+  .dback .ic{width:13px; height:13px;}
+  .dsub{font-size:10.5px; color:var(--faint); padding:0 2px 8px; line-height:1.35;}
+  .dempty{font-size:11.5px; color:var(--mut); padding:16px 8px; text-align:center; line-height:1.5;}
+
+  /* ===== ADVANCED MATERIAL & TEXTURE STUDIO PANEL ===== */
+  #matStudioPanel{
+    position:absolute; left:8px; right:8px; bottom:8px; z-index:28;
+    background:rgba(255,253,247,.98); border:1px solid var(--line2); border-radius:14px;
+    padding:12px; display:none; max-height:55vh; overflow-y:auto; box-shadow:0 12px 35px rgba(96,74,24,.25);
+  }
+  #matStudioPanel.on{display:flex; flex-direction:column; gap:8px;}
+  .matStudioHeader{display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid var(--line2); padding-bottom:6px;}
+  .matStudioHeader b{font-size:13px; color:var(--txt); display:flex; align-items:center; gap:6px;}
+  .matStudioHeader .ic{color:var(--gold); width:15px; height:15px;}
+  .matTabsRow{display:flex; gap:4px; overflow-x:auto; padding:2px 0 6px; scrollbar-width:none;}
+  .matTabsRow::-webkit-scrollbar{display:none;}
+  .matTabBtn{
+    flex:0 0 auto; border:1px solid var(--line); background:#fff; color:var(--mut);
+    border-radius:6px; padding:4px 8px; font-size:10.5px; font-weight:700; cursor:pointer; font-family:inherit;
+  }
+  .matTabBtn.on{background:var(--sel); color:var(--selTxt); border-color:var(--sel);}
+  .matTabContent{display:none; flex-direction:column; gap:8px;}
+  .matTabContent.on{display:flex;}
+  
+  .palHead{display:flex; justify-content:space-between; align-items:center; font-size:11.5px; font-weight:700;}
+  .palSwatches{display:flex; gap:6px; flex-wrap:wrap; margin-top:4px;}
+  .swatch{width:26px; height:26px; border-radius:6px; border:1px solid rgba(0,0,0,.15); cursor:pointer;}
+  .swatch:active{transform:scale(.94);}
+  .paletteRow{background:#fff; border:1px solid var(--line); border-radius:8px; padding:6px; margin-bottom:6px;}
+  
+  .texGrid{display:grid; grid-template-columns:repeat(auto-fill, minmax(70px, 1fr)); gap:6px; padding:4px 0;}
+  .texCard{background:#fff; border:1px solid var(--line); border-radius:8px; overflow:hidden; text-align:center; cursor:pointer; padding:3px;}
+  .texCard img{width:100%; height:50px; object-fit:cover; border-radius:5px;}
+  .texCard span{font-size:9.5px; font-weight:600; display:block; margin-top:2px; text-overflow:ellipsis; overflow:hidden; white-space:nowrap;}
+  .texCard:active{transform:scale(.95);}
+
+  /* Selection Panel & Context Bar */
+  #selPanel{position:absolute; left:8px; right:8px; bottom:8px; z-index:20; background:rgba(255,253,247,.97); border:1px solid var(--line2); border-radius:12px; padding:10px; display:none; max-height:46vh; overflow-y:auto; box-shadow:0 10px 30px rgba(96,74,24,.22);}
+  #selPanel.on{display:block;}
+  #selPanel h4{margin:0 0 2px; font-size:12px; font-weight:700; display:flex; align-items:center; gap:6px;}
+  #selPanel h4 .ic{width:13px; height:13px; color:var(--gold);}
+  #selPanel .sub{font-size:11px; color:var(--mut); margin-bottom:6px;}
+  .rowBtns{display:flex; gap:5px; flex-wrap:wrap;}
+  .btn{border:1px solid var(--line); background:var(--elev); color:var(--txt); border-radius:7px; padding:6px 10px; font-size:11.5px; font-weight:600; font-family:inherit; display:inline-flex; align-items:center; gap:5px; cursor:pointer;}
+  .btn .ic{width:12px; height:12px;}
+  .btn.primary{background:var(--sel); color:var(--selTxt); border-color:var(--sel);}
+  .btn.danger{background:var(--dangerBg); border-color:var(--dangerLine); color:var(--dangerTxt);}
+  .btn.small{padding:4px 8px; font-size:10.5px;}
+  label.f{display:flex; align-items:center; justify-content:space-between; gap:8px; font-size:11px; color:var(--mut); margin:5px 0; font-weight:500;}
+  label.f input[type=range]{flex:1; accent-color:#b98a2e;}
+  label.f input[type=color]{width:30px; height:22px; border:1px solid var(--line); background:transparent; padding:0; border-radius:4px;}
+  label.f select, label.f input[type=number]{background:#fff; color:var(--txt); border:1px solid var(--line); border-radius:6px; padding:4px 6px; font-size:11px; font-family:inherit;}
+  label.f textarea, .txtInput{background:#fff; color:var(--txt); border:1px solid var(--line); border-radius:7px; padding:6px 8px; font-size:12px; font-family:inherit;}
+
+  /* Modals & Menus */
+  .veil{position:fixed; inset:0; background:rgba(0,0,0,.62); z-index:50; display:none; align-items:flex-end; justify-content:center;}
+  .veil.on{display:flex;}
+  .modal{width:min(560px,100%); max-height:88vh; overflow:auto; background:var(--panel); border:1px solid var(--line); border-bottom:0; border-radius:16px 16px 0 0; padding:16px 16px calc(18px + var(--sab));}
+  .modal h3{margin:0 0 8px; font-size:14px; font-weight:700; display:flex; align-items:center; gap:7px;}
+  .modal h3 .ic{width:14px; height:14px; color:var(--gold);}
+  .modal p{font-size:12px; color:var(--mut);}
+  .modal .grid2{display:grid; grid-template-columns:1fr 1fr; gap:7px;}
+  .modal .acctRow{display:flex; align-items:center; gap:9px; padding:9px 11px; border:1px solid var(--line); border-radius:var(--r); background:var(--panel2); margin-bottom:9px;}
+  .modal .avatar{width:32px; height:32px; border-radius:50%; background:var(--elev); border:1px solid var(--line); display:inline-flex; align-items:center; justify-content:center; color:var(--dim); flex:0 0 auto;}
+  
+  #toast{position:fixed; left:50%; bottom:calc(26px + var(--sab)); transform:translateX(-50%); background:#171410; border:1px solid var(--gold); color:#f3e6c2; padding:8px 14px; border-radius:8px; font-size:12.5px; z-index:60; display:none; max-width:92vw; text-align:center;}
+  #boot{position:absolute; inset:0; z-index:40; display:flex; align-items:center; justify-content:center; background:#f5f1e6; flex-direction:column; gap:10px; text-align:center; padding:20px;}
+  .spin{width:30px; height:30px; border-radius:50%; border:3px solid #ddd2b4; border-top-color:var(--gold); animation:sp 1s linear infinite;}
+  @keyframes sp{to{transform:rotate(360deg);}}
+
+  #focusFab{position:absolute; right:8px; top:8px; z-index:26; display:none;}
+  body.focus #focusFab{display:block;}
+
+  @media (max-width:700px){
+    #logo small{display:none;}
+    #topBar{flex-wrap:nowrap !important; overflow-x:auto; row-gap:0;}
+    #topBar .iconBtn, #topBar .seg, #floorPill, #logo{flex:0 0 auto;}
+    #floorPill{max-width:32vw;}
+    #floorSel{max-width:68px;}
+    .drawer{width:min(320px,92vw);}
+  }
+</style>
+
+<div id="app">
+  <div id="topBar">
+    <div id="logo"><span class="mark">H3</span><span>HomeCraft&nbsp;3D</span></div>
+    <div class="seg" role="tablist" aria-label="mode">
+      <button id="mode2dBtn" class="on">2D Plan</button>
+      <button id="mode3dBtn">3D</button>
+    </div>
+    <div id="floorPill" title="Floors">
+      <i data-lucide="building-2"></i>
+      <select id="floorSel"></select>
+      <button class="iconBtn" id="floorAddBtn" title="Add floor"><i data-lucide="plus"></i></button>
+      <button class="iconBtn" id="floorMenuBtn" title="Floors"><i data-lucide="chevron-down"></i></button>
+    </div>
+    <button class="iconBtn" id="menuBtn" title="Menu"><i data-lucide="menu"></i></button>
+    <div class="grow"></div>
+    <button class="iconBtn" id="asBtn" title="Design assistant"><i data-lucide="bot"></i></button>
+    <button class="iconBtn" id="saveBtnTop" title="Save project"><i data-lucide="save"></i></button>
+    <button class="iconBtn" id="drawerLBtn" title="Build"><i data-lucide="brick-wall"></i></button>
+    <button class="iconBtn" id="drawerRBtn" title="Furnish"><i data-lucide="sofa"></i></button>
+    <button class="iconBtn" id="focusBtn" title="Fullscreen"><i data-lucide="maximize"></i></button>
+  </div>
+
+  <div id="views">
+    <div id="view2dWrap">
+      <canvas id="planCanvas"></canvas>
+      <div id="hud2d">
+        <div class="chip" id="snapChip">snap <b id="snapVal">25cm</b> • <b id="floorName2d">Ground</b></div>
+        <div class="fabRow">
+          <button class="fab" id="zoomOutBtn" title="Zoom out"><i data-lucide="minus"></i></button>
+          <button class="fab" id="zoomInBtn" title="Zoom in"><i data-lucide="plus"></i></button>
+          <button class="fab" id="fitBtn" title="Fit"><i data-lucide="frame"></i></button>
+          <button class="fab" id="gridBtn" title="Grid"><i data-lucide="grid-2x2"></i></button>
+        </div>
+      </div>
+    </div>
+    
+    <div id="view3dWrap" hidden>
+      <canvas id="gl"></canvas>
+      <div id="hud3d">
+        <div class="chip"><b id="floorName3d">Ground</b> • <span id="fpsChip">– fps</span></div>
+        <div class="fabRow">
+          <button class="fab on" id="orbitBtn" title="Orbit"><i data-lucide="orbit"></i></button>
+          <button class="fab" id="walkBtn" title="Walk"><i data-lucide="footprints"></i></button>
+          <button class="fab" id="topBtn" title="Top view"><i data-lucide="arrow-down"></i></button>
+          <button class="fab" id="dollBtn" title="Dollhouse view"><i data-lucide="house"></i></button>
+          <button class="fab" id="extBtn" title="Exterior view"><i data-lucide="tree-pine"></i></button>
+          <button class="fab" id="layersBtn" title="Floors: all / current"><i data-lucide="layers"></i></button>
+          <button class="fab" id="shadeBtn" title="Shadows"><i data-lucide="sun"></i></button>
+        </div>
+      </div>
+      <div id="walkStick"><div id="stickKnob"></div></div>
+    </div>
+
+    <!-- Advanced Color, Material & Texture Customization Studio Panel -->
+    <div id="matStudioPanel">
+      <div class="matStudioHeader">
+        <b><i data-lucide="palette" class="ic"></i>Color & Material Studio</b>
+        <div class="rowBtns">
+          <button class="iconBtn" id="matUndoBtn" title="Undo"><i data-lucide="undo-2"></i></button>
+          <button class="iconBtn" id="matRedoBtn" title="Redo"><i data-lucide="redo-2"></i></button>
+          <button class="iconBtn" id="matResetBtn" title="Reset Original"><i data-lucide="rotate-ccw"></i></button>
+          <button class="iconBtn" id="matStudioClose" title="Close"><i data-lucide="x"></i></button>
+        </div>
+      </div>
+      <div class="matTabsRow">
+        <button class="matTabBtn on" data-target="matTabColors">Colors</button>
+        <button class="matTabBtn" data-target="matTabPalettes">Palettes</button>
+        <button class="matTabBtn" data-target="matTabTextures">Textures</button>
+        <button class="matTabBtn" data-target="matTabFinishes">Finishes</button>
+        <button class="matTabBtn" data-target="matTabParts">Object Parts</button>
+      </div>
+
+      <!-- Tab: Colors -->
+      <div class="matTabContent on" id="matTabColors">
+        <label class="f">Color Spectrum <input type="color" id="matColorPicker" value="#b98a2e"></label>
+        <label class="f">HEX Code <input type="text" id="matHexInput" value="#b98a2e" style="width:90px;"></label>
+        <div style="border-top:1px solid var(--line); padding-top:6px; margin-top:2px;">
+          <b style="font-size:11px;">Recent Swatches</b>
+          <div class="palSwatches" id="matRecentSwatches" style="margin-top:4px;"></div>
+        </div>
+      </div>
+
+      <!-- Tab: Palettes -->
+      <div class="matTabContent" id="matTabPalettes">
+        <div id="matPalettesList"></div>
+      </div>
+
+      <!-- Tab: Textures & Mapping -->
+      <div class="matTabContent" id="matTabTextures">
+        <div class="rowBtns">
+          <button class="btn small primary" onclick="document.getElementById('matTextureUploadIn').click()">
+            <i data-lucide="upload"></i>Upload Custom Image / Fabric
+          </button>
+          <input type="file" id="matTextureUploadIn" accept="image/jpeg,image/png,image/webp" hidden>
+        </div>
+        <div class="texGrid" id="matTextureGrid"></div>
+        <div style="border-top:1px solid var(--line); padding-top:6px; margin-top:4px;">
+          <b style="font-size:11px;">Texture Mapping & Tiling</b>
+          <label class="f">Tile X <input type="range" id="matRepX" min="0.5" max="10" step="0.5" value="2"></label>
+          <label class="f">Tile Y <input type="range" id="matRepY" min="0.5" max="10" step="0.5" value="2"></label>
+          <label class="f">Rotation <input type="range" id="matRot" min="0" max="360" step="15" value="0"></label>
+        </div>
+      </div>
+
+      <!-- Tab: Material Finishes -->
+      <div class="matTabContent" id="matTabFinishes">
+        <div class="rowBtns">
+          <button class="btn small" data-finish="matte">Matte</button>
+          <button class="btn small" data-finish="glossy">Glossy</button>
+          <button class="btn small" data-finish="satin">Satin</button>
+          <button class="btn small" data-finish="velvet">Velvet</button>
+          <button class="btn small" data-finish="leather">Leather</button>
+          <button class="btn small" data-finish="suede">Suede</button>
+          <button class="btn small" data-finish="linen">Linen</button>
+          <button class="btn small" data-finish="wood">Wood</button>
+          <button class="btn small" data-finish="metal">Metal</button>
+          <button class="btn small" data-finish="chrome">Chrome</button>
+          <button class="btn small" data-finish="marble">Marble</button>
+          <button class="btn small" data-finish="glass">Glass</button>
+        </div>
+        <label class="f">Roughness <input type="range" id="matRoughness" min="0" max="1" step="0.05" value="0.7"></label>
+        <label class="f">Metallic <input type="range" id="matMetalness" min="0" max="1" step="0.05" value="0.05"></label>
+      </div>
+
+      <!-- Tab: Object Parts -->
+      <div class="matTabContent" id="matTabParts">
+        <div id="matPartsList" class="rowBtns"></div>
+      </div>
+    </div>
+
+    <div id="selPanel"></div>
+    <div id="ctxBar"></div>
+    <div id="focusFab"><div class="fabRow"><button class="fab" id="focusCatBtn" title="Catalog"><i data-lucide="armchair"></i></button><button class="fab" id="exitFocusBtn" title="Exit fullscreen"><i data-lucide="minimize"></i></button></div></div>
+
+    <div id="asPanel" aria-label="Design assistant">
+      <div id="asHead"><i data-lucide="bot"></i><b>Design Assistant</b><button class="iconBtn" id="asClose" title="Close"><i data-lucide="x"></i></button></div>
+      <div id="asMsgs"></div>
+      <div class="asChips" id="asChips"></div>
+      <form id="asForm"><input id="asInput" placeholder="Ask about your design…" autocomplete="off"><button id="asSend" type="submit" title="Send"><i data-lucide="send-horizontal"></i></button></form>
+    </div>
+
+    <div id="boot">
+      <div class="spin"></div>
+      <div><b>HomeCraft 3D</b></div>
+      <div class="hint" id="bootMsg">Preparing 2D plan + 3D engine (Three.js from CDN).</div>
+    </div>
+  <aside id="drawerL" class="drawer left" aria-label="Build catalog">
+      <div class="drHead"><span class="mk"><i data-lucide="brick-wall"></i></span><div><b>BUILD</b><span>Tools, walls, textures & outdoor</span></div><div class="grow"></div><button class="iconBtn" id="drawerLClose" title="Close"><i data-lucide="x"></i></button></div>
+      <div class="drSearch"><input id="drawerLSearch" placeholder="Search build items…" autocomplete="off"></div>
+      <div class="drChips">
+        <button class="fchip on" id="fBAll">All</button>
+        <button class="fchip" id="fBOut">Outdoor</button>
+        <button class="fchip" id="fBTex">Textures</button>
+      </div>
+      <div class="drSecLab">TOOLS</div>
+      <div class="drTools" id="drawerTools"></div>
+      <div class="drBody" id="drawerLBody"></div>
+    </aside>
+
+    <aside id="drawerR" class="drawer right" aria-label="Furnishing catalog">
+      <div class="drHead"><span class="mk"><i data-lucide="sofa"></i></span><div><b>FURNISH</b><span>Sofas, beds, decor & lighting</span></div><div class="grow"></div><button class="iconBtn" id="drawerRClose" title="Close"><i data-lucide="x"></i></button></div>
+      <div class="drSearch"><input id="drawerRSearch" placeholder="Search sofas, beds, lamps, outdoor…" autocomplete="off"></div>
+      <div class="drChips">
+        <button class="fchip on" id="fAll">All</button>
+        <button class="fchip" id="fWall">Wall</button>
+        <button class="fchip" id="fShelf">Shelf</button>
+      </div>
+      <div class="drBody" id="drawerRBody"></div>
+    </aside>
+</div>
+
+  
+  </div>
+
+<!-- Workspace menu with Google Drive Cloud Sync row -->
+<div class="veil" id="menuVeil">
+  <div class="modal">
+    <h3><i data-lucide="menu"></i>Workspace</h3>
+    <div class="acctRow"><span class="avatar"><i data-lucide="user-round"></i></span><span><b style="font-size:13px">HomeCraft Studio</b><br><small style="color:var(--mut)">Local workspace • autosaves on this device</small></span></div>
+    
+    <!-- Google Drive Cloud Sync Row -->
+    <div class="acctRow" id="driveRow" style="display:flex; align-items:center; justify-content:space-between; gap:10px; background:#1b2333; border:1px solid var(--line2); padding:10px 12px; border-radius:10px; margin-bottom:12px;">
+      <div>
+        <b style="font-size:12.5px; color:#fff;">Google Drive Cloud Sync</b><br>
+        <small id="driveStatusText" style="color:#8fa5c4;">Not connected (local storage only)</small>
+      </div>
+      <button class="btn small primary" id="driveConnectBtn" type="button" style="background:#ff2a85; color:#fff; border:none; padding:6px 12px; border-radius:8px; font-weight:700;">Connect Drive</button>
+    </div>
+    <div id="driveSetup" hidden style="background:#1b2333; border:1px solid var(--line2); padding:10px 12px; border-radius:10px; margin:-4px 0 12px; font-size:11.5px; color:#c9d4e8;">
+      <b style="color:#fff;">One-time setup — free, ~2 minutes</b>
+      <ol style="margin:6px 0 6px 16px; padding:0; line-height:1.5;">
+        <li>Open <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener" style="color:#ff8ab5;">Google Cloud → Credentials</a> (new or existing project).</li>
+        <li>Configure OAuth consent screen: <b>External</b>, add your Gmail as a <b>test user</b>.</li>
+        <li>Create credentials → <b>OAuth client ID</b> → type <b>Web application</b> → under <b>Authorized JavaScript origins</b> add:<br><code id="driveOrigin" style="color:#fff;"></code> <button class="btn small" id="driveCopyOrigin" type="button">Copy</button></li>
+        <li>Paste the client ID below and connect. The app only touches its own backup files.</li>
+      </ol>
+      <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
+        <input id="driveIdInput" class="txtInput" placeholder="Google client ID (…apps.googleusercontent.com)" style="flex:1; min-width:180px; background:#0f1522; color:#fff; border-color:#3a4a6b;">
+        <button class="btn small primary" id="driveIdSave" type="button" style="background:#ff2a85; color:#fff; border:none;">Save ID &amp; Connect</button>
+      </div>
+    </div>
+    <div id="driveConnected" hidden style="background:#1b2333; border:1px solid var(--line2); padding:10px 12px; border-radius:10px; margin:-4px 0 12px; font-size:11.5px; color:#c9d4e8;">
+      <div class="rowBtns">
+        <button class="btn small primary" id="driveSaveBtn" type="button">Save backup now</button>
+        <button class="btn small" id="driveRefreshBtn" type="button">Refresh list</button>
+        <button class="btn small" id="driveDisconnectBtn" type="button">Disconnect</button>
+      </div>
+      <div id="driveFiles" style="margin-top:6px; display:flex; flex-direction:column; gap:5px;"></div>
+    </div>
+
+    <!-- Dropbox Cloud Sync Row -->
+    <div class="acctRow" id="dbRow" style="display:flex; align-items:center; justify-content:space-between; gap:10px; background:#1b2333; border:1px solid var(--line2); padding:10px 12px; border-radius:10px; margin-bottom:12px;">
+      <div>
+        <b style="font-size:12.5px; color:#fff;">Dropbox Cloud Sync</b><br>
+        <small id="dbStatusText" style="color:#8fa5c4;">Not connected (local storage only)</small>
+      </div>
+      <button class="btn small primary" id="dbConnectBtn" type="button" style="background:#0061ff; color:#fff; border:none; padding:6px 12px; border-radius:8px; font-weight:700;">Connect Dropbox</button>
+    </div>
+    <div id="dbSetup" hidden style="background:#1b2333; border:1px solid var(--line2); padding:10px 12px; border-radius:10px; margin:-4px 0 12px; font-size:11.5px; color:#c9d4e8;">
+      <b style="color:#fff;">One-time setup — free, ~2 minutes</b>
+      <ol style="margin:6px 0 6px 16px; padding:0; line-height:1.5;">
+        <li>Open <a href="https://www.dropbox.com/developers/apps/create" target="_blank" rel="noopener" style="color:#7aa5ff;">Dropbox App Console → Create app</a> (new or existing account).</li>
+        <li>Choose <b>Scoped access</b> → type <b>App folder</b> → name it (e.g. HomeCraft3D).</li>
+        <li>On the app's <b>Permissions</b> tab tick <b>files.content.write</b> + <b>files.content.read</b> and Submit. On <b>Settings</b>, under <b>Redirect URIs</b> add:<br><code id="dbRedirect" style="color:#fff;"></code> <button class="btn small" id="dbCopyRedirect" type="button">Copy</button></li>
+        <li>Paste the <b>App key</b> below and connect. The app only touches its own folder.</li>
+      </ol>
+      <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
+        <input id="dbAppKeyInput" class="txtInput" placeholder="Dropbox app key" style="flex:1; min-width:180px; background:#0f1522; color:#fff; border-color:#3a4a6b;">
+        <button class="btn small primary" id="dbKeySave" type="button" style="background:#0061ff; color:#fff; border:none;">Save key &amp; Connect</button>
+      </div>
+    </div>
+    <div id="dbConnected" hidden style="background:#1b2333; border:1px solid var(--line2); padding:10px 12px; border-radius:10px; margin:-4px 0 12px; font-size:11.5px; color:#c9d4e8;">
+      <div class="rowBtns">
+        <button class="btn small primary" id="dbSaveBtn" type="button">Save backup now</button>
+        <button class="btn small" id="dbRefreshBtn" type="button">Refresh list</button>
+        <button class="btn small" id="dbDisconnectBtn" type="button">Disconnect</button>
+      </div>
+      <div id="dbFiles" style="margin-top:6px; display:flex; flex-direction:column; gap:5px;"></div>
+    </div>
+
+    <!-- House Address / Lot Location -->
+    <label class="f">Property Address <input type="text" id="houseAddress" placeholder="e.g. 742 Ocean Drive" style="width:60%;"></label>
+
+    <div class="grid2">
+      <button class="btn" id="newHouseBtn"><i data-lucide="plus"></i>New house</button>
+      <button class="btn" id="demoHouseBtn"><i data-lucide="house"></i>Demo villa</button>
+    </div>
+    <h3 style="margin-top:14px"><i data-lucide="folder-open"></i>My houses <small id="projCur" style="color:var(--mut)"></small></h3>
+    <div id="projList"></div>
+    <div class="grid2" style="margin-top:8px">
+      <button class="btn" id="saveBtn"><i data-lucide="save"></i>Save</button>
+      <button class="btn" id="exportBtn"><i data-lucide="download"></i>Export JSON</button>
+      <button class="btn" id="importBtn"><i data-lucide="upload"></i>Import JSON</button>
+      <button class="btn" id="shotBtn"><i data-lucide="camera"></i>Screenshot</button>
+      <button class="btn" id="aiBtn"><i data-lucide="sparkles"></i>AI House Builder</button>
+      <button class="btn" id="designBtn"><i data-lucide="armchair"></i>Room AI Designer</button>
+      <button class="btn" id="uploadBtn"><i data-lucide="box"></i>Upload 3D mesh</button>
+      <button class="btn" id="veraBtn"><i data-lucide="palette"></i>AI Furniture Creator</button>
+      <button class="btn" id="lockAllBtn"><i data-lucide="lock"></i>Lock all walls</button>
+      <button class="btn" id="unlockAllBtn"><i data-lucide="lock-open"></i>Unlock all walls</button>
+      <button class="btn" id="helpBtn"><i data-lucide="circle-help"></i>Help</button>
+    </div>
+    <p id="saveState">Autosave is on (this device).</p>
+    <label class="f">Wall height default (m) <input type="number" id="wallHInput" step="0.1" min="2" max="5" value="2.7"></label>
+    <label class="f">Wall thickness (m) <input type="number" id="wallTInput" step="0.01" min="0.05" max="0.5" value="0.15"></label>
+    <label class="f">Snap <select id="snapSel"><option value="0.1">10 cm</option><option value="0.25" selected>25 cm</option><option value="0.5">50 cm</option><option value="1">1 m</option><option value="0.05">5 cm</option></select></label>
+    <label class="f">Slab W × D (m) <span><input type="number" id="slabW" step="0.5" style="width:64px" value="12"> × <input type="number" id="slabD" step="0.5" style="width:64px" value="10"></span></label>
+    <div class="rowBtns"><button class="btn" id="fitSlabBtn"><i data-lucide="frame"></i>Fit slab to house</button><button class="btn primary" id="closeMenuBtn">Done</button></div>
+    <input type="file" id="importFile" accept="application/json,.json" hidden>
+    <input type="file" id="meshFile" accept=".glb,.gltf,.obj,.fbx,.stl,.3ds,.zip" hidden>
+  </div>
+</div>
+
+<div class="veil" id="uploadVeil">
+  <div class="modal">
+    <h3><i data-lucide="box"></i>Import 3D model</h3>
+    <div class="sub" id="upStatus">Reading file…</div>
+    <img id="upPrev" alt="model preview" hidden>
+    <div class="sub" id="upMeta"></div>
+    <div id="upWarn"></div>
+    <label class="f">Name <input id="upName" class="txtInput" maxlength="40" placeholder="e.g. Velvet armchair"></label>
+    <label class="f">Category <select id="upCat"></select></label>
+    <label class="f">Subcategory <input id="upSub" class="txtInput" maxlength="30" placeholder="optional, e.g. Seating"></label>
+    <label class="f">Room <input id="upRoom" class="txtInput" list="upRooms" maxlength="30" placeholder="e.g. Living room"></label>
+    <datalist id="upRooms"><option>Living room</option><option>Bedroom</option><option>Kitchen</option><option>Dining room</option><option>Bathroom</option><option>Office</option><option>Patio</option><option>Garden</option><option>Garage</option><option>Driveway</option></datalist>
+    <label class="f">Description <input id="upDesc" class="txtInput" maxlength="120" placeholder="short description for the catalog"></label>
+    <div class="rowBtns">
+      <label class="f">W <input type="number" id="upW" step="0.1" min="0.1" style="width:64px"></label>
+      <label class="f">D <input type="number" id="upD" step="0.1" min="0.1" style="width:64px"></label>
+      <label class="f">H <input type="number" id="upH" step="0.1" min="0.1" style="width:64px"></label>
+      <label class="f">Facing <select id="upRot"><option value="0">Front</option><option value="90">Right</option><option value="180">Back</option><option value="270">Left</option></select></label>
+    </div>
+    <div class="rowBtns" style="margin-top:10px">
+      <button class="btn" id="upAI"><i data-lucide="sparkles"></i>AI identify</button>
+      <button class="btn primary" id="upSave"><i data-lucide="plus"></i>Save to My Models</button>
+      <button class="btn" id="upCancel">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<div class="veil" id="floorVeil">
+  <div class="modal">
+    <h3><i data-lucide="building-2"></i>Floors (ground → infinity)</h3>
+    <p>Each floor has its own walls, doors, windows and furniture. Add as many as you like. Use duplicate for typical storeys.</p>
+    <div id="floorList"></div>
+    <div class="rowBtns" style="margin-top:10px">
+      <button class="btn primary" id="addFloorBtn"><i data-lucide="plus"></i>Add floor above</button>
+      <button class="btn" id="dupFloorBtn"><i data-lucide="copy"></i>Duplicate current</button>
+      <button class="btn" id="closeFloorBtn">Done</button>
+    </div>
+  </div>
+</div>
+
+<div class="veil" id="settingsVeil">
+  <div class="modal">
+    <h3><i data-lucide="settings"></i>Settings</h3>
+    <p>Advanced build + graphics settings. Changes apply live and autosave.</p>
+    <h3 style="margin-top:10px"><i data-lucide="brick-wall"></i>Build defaults</h3>
+    <label class="f">Snap <select id="snapSel2"><option value="0.1">10 cm</option><option value="0.25" selected>25 cm</option><option value="0.5">50 cm</option><option value="1">1 m</option><option value="0.05">5 cm</option></select></label>
+    <label class="f">Wall height (m) <input type="number" id="wallHInput2" step="0.1" min="2" max="5" value="2.7"></label>
+    <label class="f">Wall thickness (m) <input type="number" id="wallTInput2" step="0.01" min="0.05" max="0.5" value="0.15"></label>
+    <h3 style="margin-top:10px"><i data-lucide="sparkles"></i>Graphics</h3>
+    <label class="f">Quality <select id="qSel"><option value="performance">Performance</option><option value="balanced" selected>Balanced</option><option value="high">High</option><option value="ultra">Ultra</option></select></label>
+    <label class="f">Auto quality <select id="autoQSel"><option value="on">On</option><option value="off">Off</option></select></label>
+    <label class="f">Live FPS <span id="fpsNow" class="sub">–</span></label>
+    <label class="f">Lighting <select id="lightSel"><option value="day">Day</option><option value="morning">Morning</option><option value="afternoon">Afternoon</option><option value="sunset">Sunset</option><option value="night">Night</option></select></label>
+    <label class="f">Brightness <input type="range" id="brightR" min="0.4" max="1.6" step="0.05" value="1"></label>
+    <label class="f">Warmth <input type="range" id="warmR" min="0" max="1" step="0.05" value="0.35"></label>
+    <label class="f">Shadows <select id="shadSel"><option value="off">Off</option><option value="on">On</option></select></label>
+    <label class="f">Roof (top floor) <select id="roofSel"><option value="on">On</option><option value="off">Off</option></select></label>
+    <label class="f">Plan overlay <select id="bpVis"><option value="on">Visible</option><option value="off">Hidden</option></select></label>
+    <label class="f">Overlay opacity <input type="range" id="bpOp" min="0.1" max="1" step="0.05" value="0.55"></label>
+    <div class="rowBtns" style="margin-top:10px"><button class="btn primary" id="closeSettingsBtn">Done</button></div>
+  </div>
+</div>
+
+<div class="veil" id="aiVeil">
+  <div class="modal">
+    <h3><i data-lucide="sparkles"></i>AI House Builder</h3>
+    <p>Upload a floor plan or blueprint → AI detects walls, rooms, doors and windows → you review → editable 2D + 3D shell. Nothing is furnished automatically.</p>
+    <div id="aiSteps"></div>
+    <div class="rowBtns" style="margin-top:10px"><button class="btn" id="aiCloseBtn">Close</button></div>
+    <input type="file" id="aiFile" accept=".png,.jpg,.jpeg,.webp,.pdf" hidden>
+  </div>
+</div>
+
+<div class="veil" id="veraVeil">
+  <div class="modal">
+    <h3><i data-lucide="palette"></i>AI Furniture Creator</h3>
+    <p>Describe your dream furniture → AI drafts a Vera-ready prompt → import file back here.</p>
+    <label class="f">Describe it <textarea id="veraDesc" rows="3" class="txtInput" style="width:100%" placeholder="e.g. black leather lounge chair with walnut legs"></textarea></label>
+    <div class="rowBtns"><button class="btn" id="veraPhotosBtn"><i data-lucide="image"></i>Add reference photos</button><span class="sub" id="veraPhotoN"></span></div>
+    <div id="veraThumbs" class="rowBtns"></div>
+    <input type="file" id="veraFiles" accept="image/*" multiple hidden>
+    <div class="rowBtns"><button class="btn primary" id="veraDraft"><i data-lucide="sparkles"></i>Draft Vera prompt</button></div>
+    <div id="veraOut" hidden>
+      <label class="f">Vera prompt — paste into Vera's <textarea id="veraPrompt" rows="4" readonly class="txtInput" style="width:100%"></textarea></label>
+      <div class="rowBtns"><button class="btn small" id="veraCopyP"><i data-lucide="copy"></i>Copy prompt</button></div>
+      <label class="f">Negative prompt <textarea id="veraNeg" rows="2" readonly class="txtInput" style="width:100%"></textarea></label>
+      <div class="rowBtns"><button class="btn small" id="veraCopyN"><i data-lucide="copy"></i>Copy negative</button></div>
+      <div class="sub" id="veraTips"></div>
+      <div class="rowBtns"><button class="btn primary" id="veraGo">Open Vera's<i data-lucide="arrow-down"></i></button><button class="btn" id="veraBack"><i data-lucide="box"></i>I have the file — import it</button></div>
+    </div>
+    <div class="rowBtns" style="margin-top:10px"><button class="btn" id="veraClose">Close</button></div>
+  </div>
+</div>
+
+<div class="veil" id="designVeil">
+  <div class="modal">
+    <h3><i data-lucide="armchair"></i>Room AI Designer</h3>
+    <div class="sub" id="designRoom">Reads the room at the screen center.</div>
+    <div class="rowBtns">
+      <label class="f">Style <select id="designStyle"><option>Cozy</option><option>Modern</option><option>Minimalist</option><option>Luxury</option><option>Rustic</option><option>Playful kids</option></select></label>
+      <button class="btn primary" id="designGo"><i data-lucide="sparkles"></i>Get design</button>
+    </div>
+    <div class="sub" id="designStatus"></div>
+    <div id="designOut"></div>
+    <div class="rowBtns" style="margin-top:8px">
+      <button class="btn" id="designPlace" hidden><i data-lucide="armchair"></i>Place suggested items</button>
+      <button class="btn" id="designPaint" hidden><i data-lucide="paint-roller"></i>Apply palette to walls</button>
+    </div>
+    <div class="rowBtns" style="margin-top:10px"><button class="btn" id="designClose">Close</button></div>
+  </div>
+</div>
+
+<div class="veil" id="helpVeil">
+  <div class="modal">
+    <h3><i data-lucide="circle-help"></i>How to build</h3>
+    <p><b>2D Plan:</b> Wall = tap points to draw • Room = tap two corners • Select / Move = drag walls or furniture. <b>3D:</b> Orbit • Walk (WASD / joy) • Dollhouse • Top • Exterior.</p>
+    <div class="rowBtns"><button class="btn primary" id="closeHelpBtn">Got it</button></div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<!-- Local Lucide script from your Perchance vendor folder -->
+<script src="src/vendor/lucide.min.js"></script>
+<script>
+  function ensureIcons(){
+    if (window.lucide && window.lucide.createIcons) {
+      window.lucide.createIcons();
+    }
+  }
+  window.addEventListener('DOMContentLoaded', ensureIcons);
+  setTimeout(ensureIcons, 250);
+  setTimeout(ensureIcons, 1000);
+</script>
+<script type="module" src="src/app.js?v=20261102g"></script>
+</body>
+</html>
+140389440391-26h9ueo7cf19rps823os0a780vouokh0.apps.googleusercontent.com
