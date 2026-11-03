@@ -2577,10 +2577,8 @@ async function setMode(m){
   $('#view2dWrap').hidden=m!=='2d';
   $('#view3dWrap').hidden=m!=='3d';
   if(m==='3d'){
-    if(app._init3DPromise && !app.view3d.ready){
-      await app._init3DPromise;
-    }
-    app.view3d.resize(); app.view3d.rebuild();
+    if(!app.view3d.ready && app.ensure3D) await app.ensure3D();
+    if(app.view3d.ready){ app.view3d.resize(); app.view3d.rebuild(); }
   }
   else app.view2d.resize();
 }
@@ -2609,16 +2607,25 @@ async function boot(){
   if(bootEl) bootEl.style.display='none';
   app.refreshSelPanel();
 
-  // Initialize 3D in background asynchronously without blocking initial load
-  app._init3DPromise = (async()=>{
-    try{
-      await app.view3d.init(m=>{});
-      for(const c of app.custom){ try{ await app.loadCustomTemplate(c); }catch(e){} }
-      if(app.mode==='3d'){ app.view3d.resize(); app.view3d.rebuild(); }
-    }catch(e){
-      console.warn('3D initialization note', e);
+  // Defer the heavy WebGL renderer, environment map and 3D asset setup
+  // until the user first opens 3D mode. The 2D builder is ready immediately.
+  app._init3DPromise = null;
+  app.ensure3D = () => {
+    if(app.view3d.ready) return Promise.resolve();
+    if(!app._init3DPromise){
+      app._init3DPromise = (async()=>{
+        try{
+          await app.view3d.init(m=>{});
+          for(const c of app.custom){ try{ await app.loadCustomTemplate(c); }catch(e){} }
+        }catch(e){
+          console.warn('3D initialization note',e);
+          app._init3DPromise = null;
+          toast('3D view could not load. Check your connection and try again.');
+        }
+      })();
     }
-  })();
+    return app._init3DPromise;
+  };
 
   window.addEventListener('resize',()=>{ app.view2d.resize(); app.view3d.resize(); });
   // keyboard
