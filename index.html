@@ -756,6 +756,15 @@
       </div>
     </div>
 
+    <h3 style="margin-top:12px"><i data-lucide="sparkles"></i>AI Models · OpenRouter</h3>
+    <p style="font-size:11px;color:var(--mut);margin:0 0 8px;">Choose the model used for blueprint analysis and OpenRouter-powered blueprint text requests. Your choice is saved on this device.</p>
+    <label class="f">Blueprint AI model <select id="openRouterModelSel">
+      <option value="deepseek/deepseek-v4.1-flash">DeepSeek V4.1 Flash · Default</option>
+      <option value="z-ai/glm-5.3-flash">GLM 5.3 Flash</option>
+      <option value="qwen/qwen3.8-flash">Qwen 3.8 Flash</option>
+    </select></label>
+    <div class="rowBtns" style="margin:6px 0 4px;"><button class="btn small" id="openRouterTestBtn" type="button">Test selected model</button></div>
+    <div id="openRouterModelStatus" class="sub" style="font-size:10.5px;line-height:1.45;margin-bottom:12px;">Current model: DeepSeek V4.1 Flash · Default</div>
     <h3 style="margin-top:10px"><i data-lucide="brick-wall"></i>Build defaults</h3>
     <label class="f">Snap <select id="snapSel2"><option value="0.1">10 cm</option><option value="0.25" selected>25 cm</option><option value="0.5">50 cm</option><option value="1">1 m</option><option value="0.05">5 cm</option></select></label>
     <label class="f">Wall height (m) <input type="number" id="wallHInput2" step="0.1" min="2" max="5" value="2.7"></label>
@@ -868,6 +877,6 @@
   setTimeout(ensureIcons, 250);
   setTimeout(ensureIcons, 1000);
 </script>
-<script type="module" src="src/app.js?v=20261103d"></script>
+<script type="module" src="src/app.js?v=20261103e"></script>
 </body>
 </html>
