@@ -30,6 +30,16 @@ export async function signUp(email, password) {
   return { user: data.user, needsConfirm: !(data.session) };
 }
 
+export async function sendMagicLink(email) {
+  const sb = await getClient();
+  const redirectTo = new URL(location.pathname, location.origin).toString();
+  const { error } = await sb.auth.signInWithOtp({
+    email,
+    options: { emailRedirectTo: redirectTo, shouldCreateUser: false }
+  });
+  if (error) throw new Error(errMsg(error, 'Could not send sign-in email.'));
+}
+
 export async function signIn(email, password) {
   const sb = await getClient();
   const { data, error } = await sb.auth.signInWithPassword({ email, password });
