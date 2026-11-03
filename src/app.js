@@ -1806,31 +1806,45 @@ function renderFloorList(){
 app.renderFloorList=renderFloorList;
 app.syncAll=function(){ app.resolveAll(); renderFloorSel(); renderFloorList(); app.view2d.request(); app.view3d.rebuild(); if(!app.sel) app.hideCtxBar(); else if(!app._draggingPanel) app.showCtxBar(); app.refreshSelPanel(); };
 
-// uploads v2: single models + ZIP archives, review modal, kv overflow storage
+// Upload storage: small files stay in the catalog; large files use IndexedDB on this device.
+function openModelDB(){
+  return new Promise((resolve,reject)=>{
+    if(!('indexedDB' in window)){ reject(new Error('This browser does not support local model storage.')); return; }
+    const req=indexedDB.open('homecraft3d-models',1);
+    req.onupgradeneeded=()=>{ const db=req.result; if(!db.objectStoreNames.contains('models')) db.createObjectStore('models'); };
+    req.onsuccess=()=>resolve(req.result);
+    req.onerror=()=>reject(req.error||new Error('Could not open model storage.'));
+  });
+}
+async function modelDBPut(key,bytes){
+  const db=await openModelDB();
+  try{ await new Promise((resolve,reject)=>{ const tx=db.transaction('models','readwrite'); tx.objectStore('models').put(bytes instanceof Uint8Array?bytes:new Uint8Array(bytes),key); tx.oncomplete=resolve; tx.onerror=()=>reject(tx.error); tx.onabort=()=>reject(tx.error||new Error('Model storage was interrupted.')); }); }
+  finally{ db.close(); }
+}
+async function modelDBGet(key){
+  const db=await openModelDB();
+  try{ return await new Promise((resolve,reject)=>{ const tx=db.transaction('models','readonly'); const req=tx.objectStore('models').get(key); req.onsuccess=()=>resolve(req.result||null); req.onerror=()=>reject(req.error); }); }
+  finally{ db.close(); }
+}
 async function customBytes(rec){
-  if(rec.dataUrl){
-    try{ return Uint8Array.from(atob(rec.dataUrl.split(',')[1]),c=>c.charCodeAt(0)); }catch(e){ return null; }
-  }
-  if(rec.kvKey){
-    try{
-      const kv=globalThis.root?.kv; if(!kv) return null;
-      const v=await kv.models.get(rec.kvKey);
-      if(!v) return null;
-      return v instanceof Uint8Array?v:new Uint8Array(v);
-    }catch(e){ return null; }
-  }
+  if(rec.dataUrl){ try{ return Uint8Array.from(atob(rec.dataUrl.split(',')[1]),c=>c.charCodeAt(0)); }catch(e){ return null; } }
+  if(rec.idbKey){ try{ const v=await modelDBGet(rec.idbKey); return v?(v instanceof Uint8Array?v:new Uint8Array(v)):null; }catch(e){ return null; } }
+  if(rec.kvKey){ try{ const kv=globalThis.root?.kv; if(!kv) return null; const v=await kv.models.get(rec.kvKey); if(!v) return null; return v instanceof Uint8Array?v:new Uint8Array(v); }catch(e){ return null; } }
   return null;
 }
 async function persistBytes(key,bytes){
-  if(bytes.length<=700*1024){
+  const data=bytes instanceof Uint8Array?bytes:new Uint8Array(bytes);
+  if(data.length<=700*1024){
     let s=''; const CH=0x8000;
-    for(let i=0;i<bytes.length;i+=CH) s+=String.fromCharCode.apply(null,bytes.subarray(i,i+CH));
+    for(let i=0;i<data.length;i+=CH) s+=String.fromCharCode.apply(null,data.subarray(i,i+CH));
     return {dataUrl:'data:model/octet-stream;base64,'+btoa(s)};
   }
-  const kv=globalThis.root?.kv;
-  if(!kv) throw new Error('Model is '+(bytes.length/1048576).toFixed(1)+'MB — too big for this device\'s local storage.');
-  await kv.models.set(key,bytes instanceof Uint8Array?bytes:new Uint8Array(bytes));
-  return {kvKey:key};
+  try{ await modelDBPut(key,data); return {idbKey:key}; }
+  catch(err){
+    const kv=globalThis.root?.kv;
+    if(kv){ await kv.models.set(key,data); return {kvKey:key}; }
+    throw new Error('Could not save '+(data.length/1048576).toFixed(1)+'MB model on this device: '+(err.message||err));
+  }
 }
 function setUploadStatus(t){ const el=$('#upStatus'); if(el) el.innerHTML=t; }
 function openUploadReview(){
@@ -1864,7 +1878,7 @@ async function handleMeshFile(file){
   if(!file) return;
   openUploadReview();
   try{
-    const imp=await import('./importer.js?v=20261103e');
+    const imp=await import('./importer.js?v=20261103f');
     const res=await imp.importModelFile(file,app.view3d.THREE,p=>setUploadStatus('<div class="spin" style="margin:8px auto"></div>'+p));
     app._upload={file,res,imp,guess:imp.guessFromName(res.baseName)};
     fillUploadReview(res);
@@ -2054,7 +2068,7 @@ async function modelFileHash(file){
   return file.name.toLowerCase()+'|'+file.size+'|'+file.lastModified;
 }
 async function bulkUploadModels(fileList){
-  const files=Array.from(fileList||[]).filter(f=>/\.(glb|gltf|obj|fbx|stl|3ds|zip)$/i.test(f.name));
+  const files=Array.from(fileList||[]).filter(f=>/\.(glb|gltf|obj|fbx|stl|3ds)$/i.test(f.name));
   if(!files.length){ toast('Choose supported 3D files first'); return; }
   $('#uploadVeil').classList.add('on'); $('#menuVeil').classList.remove('on');
   $('#bulkMeshFiles').value='';
@@ -2067,7 +2081,7 @@ async function bulkUploadModels(fileList){
       const hash=await modelFileHash(file);
       const already=app.custom.some(c=>c.fileHash===hash || (!c.fileHash&&String(c.origName||'').toLowerCase()===file.name.toLowerCase()));
       if(seen.has(hash)||already){ skipped++; continue; }
-      const imp=await import('./importer.js?v=20261103e');
+      const imp=await import('./importer.js?v=20261103f');
       const res=await imp.importModelFile(file,app.view3d.THREE,()=>{});
       const guess=imp.guessFromName(res.baseName)||{};
       const id=uid('m'), fmt=res.optimized?'glb':res.srcExt;
@@ -2159,7 +2173,7 @@ app.loadCustomTemplate=async function(rec){
     let obj=null;
     if(rec.sidecars){
       // optimizer failed at import: rebuild from preserved original + sidecars
-      const imp=await import('./importer.js?v=20261103e');
+      const imp=await import('./importer.js?v=20261103f');
       const files=[];
       for(const s of rec.sidecars){
         const b=s.dataUrl?Uint8Array.from(atob(s.dataUrl.split(',')[1]),c=>c.charCodeAt(0)):await customBytes({kvKey:s.kvKey});
