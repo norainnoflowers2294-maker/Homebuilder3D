@@ -190,14 +190,14 @@ class App {
       if(isColor){
         for(const ww of walls){
           ww.color = data.hex;
-          if(!ww.finish) ww.finish = { tex: 'wallpaint', color: data.hex };
-          else ww.finish.color = data.hex;
+          ww.finish = { ...(ww.finish||{}), tex:'wallpaint', color:data.hex };
+          delete ww.finish.textureUrl;
         }
+      } else if(data.dataUrl){
+        for(const ww of walls) ww.finish={tex:'wallpaint',color:'#ffffff',textureUrl:data.dataUrl};
       } else {
         const texKey = data.tex || data.id || 'wallpaint';
-        for(const ww of walls){
-          ww.finish = { tex: texKey, color: data.base || '#ffffff' };
-        }
+        for(const ww of walls) ww.finish = { tex: texKey, color: data.base || '#ffffff' };
       }
       saveState(this.state);
       this.syncAll();
@@ -206,11 +206,8 @@ class App {
     } else if(sel.type === 'slab' || sel.type === 'zone'){
       this.pushUndo();
       const texKey = data.tex || data.id;
-      if(data.kind === 'floor' || data.kind === 'patio' || data.kind === 'terrain'){
-        fl.finish = texKey;
-      } else {
-        fl.finish = texKey || 'oak';
-      }
+      if(data.dataUrl) fl.customTextureUrl=data.dataUrl;
+      else { delete fl.customTextureUrl; fl.finish = texKey || 'oak'; }
       saveState(this.state);
       this.syncAll();
       sound.playFloorWhoosh();
@@ -1068,11 +1065,16 @@ function renderTextureStudioDrawer(){
   const body = document.getElementById('drawerTexBody');
   if (!body) return;
   body.innerHTML = '';
-
+  const uploadRow=document.createElement('div');
+  uploadRow.innerHTML='<button class="btn primary" type="button" id="uploadSurfaceTextureBtn">Upload your own texture / pattern</button><input id="uploadSurfaceTextureInput" type="file" accept="image/png,image/jpeg,image/webp" hidden>';
+  body.appendChild(uploadRow);
+  const loadCustomSurfaceTextures=()=>{ try{ app.customSurfaceTextures=JSON.parse(localStorage.getItem('homecraft_surface_textures')||'[]'); }catch(e){ app.customSurfaceTextures=[]; } };
+  loadCustomSurfaceTextures();
   const allItems = [
     ...FINISHES.map(f => ({ ...f, kind: 'finish', type: 'texture', sub: 'Wall finish' })),
     ...ZONE_MATS.map(m => ({ ...m, kind: m.kind, type: 'texture', sub: m.kind === 'floor' ? 'Flooring' : m.kind === 'patio' ? 'Patio' : 'Outdoor terrain' })),
-    ...DESIGNER_COLORS.map(c => ({ ...c, type: 'color', kind: 'color', sub: 'Designer Paint Color' }))
+    ...DESIGNER_COLORS.map(c => ({ ...c, type: 'color', kind: 'color', sub: 'Designer Paint Color' })),
+    ...(app.customSurfaceTextures||[]).map(t=>({...t,kind:'custom',type:'texture',sub:'Your uploaded pattern'}))
   ];
 
   const search = (document.getElementById('drawerTexSearch')?.value || '').toLowerCase().trim();
@@ -1105,7 +1107,7 @@ function renderTextureStudioDrawer(){
     card.className = 'icard' + (isArmed ? ' on' : '');
     card.draggable = true;
 
-    const thumbUrl = getTextureThumb(item, 100);
+    const thumbUrl = item.dataUrl || getTextureThumb(item, 100);
     card.innerHTML = `
       <span class="im" style="background:#eee;position:relative;overflow:hidden;">
         <img src="${thumbUrl}" alt="${item.name}" draggable="false" style="width:100%;height:100%;object-fit:cover;display:block;">
@@ -1143,6 +1145,24 @@ function renderTextureStudioDrawer(){
   });
 
   body.appendChild(grid);
+  const uploadBtn=document.getElementById('uploadSurfaceTextureBtn');
+  const uploadInput=document.getElementById('uploadSurfaceTextureInput');
+  if(uploadBtn&&uploadInput){
+    uploadBtn.onclick=()=>uploadInput.click();
+    uploadInput.onchange=()=>{
+      const file=uploadInput.files?.[0]; if(!file) return;
+      const reader=new FileReader();
+      reader.onload=()=>{
+        const entry={id:'usertex_'+Date.now(),name:file.name.replace(/\\.[^.]+$/,''),dataUrl:String(reader.result),base:'#ffffff'};
+        app.customSurfaceTextures=app.customSurfaceTextures||[];
+        app.customSurfaceTextures.push(entry);
+        try{ localStorage.setItem('homecraft_surface_textures',JSON.stringify(app.customSurfaceTextures)); }
+        catch(e){ app.customSurfaceTextures.pop(); toast('Image is too large to save. Try a smaller texture image.'); return; }
+        renderTextureStudioDrawer(); toast('Texture saved. Tap it, then tap a wall, floor or object.');
+      };
+      reader.readAsDataURL(file); uploadInput.value='';
+    };
+  }
 }
 
 function customCardDefs(){
