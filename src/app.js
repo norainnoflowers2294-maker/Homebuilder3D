@@ -1614,7 +1614,7 @@ app.refreshSelPanel=function(){
     $('#wFull').onclick=()=>setWallHeight(app.state.settings.wallHeightDefault||fl.wallHeight||2.7);
     $('#wH').oninput=e=>{ w.h=+e.target.value; $('#wHv').textContent=(+e.target.value).toFixed(1)+'m'; app.dirty(false); app.view2d.request(); app.view3d.rebuild(); queueSave(); };
     $('#wT').oninput=e=>{ w.t=+e.target.value; $('#wTv').textContent=(+e.target.value).toFixed(2)+'m'; app.dirty(false); app.view2d.request(); app.view3d.rebuild(); queueSave(); };
-    $('#wC').oninput=e=>{ w.color=e.target.value; app.dirty(false); app.view2d.request(); app.view3d.rebuild(); queueSave(); };
+    $('#wC').oninput=e=>{ w.color=e.target.value; if(w.finish) w.finish.color=e.target.value; app.dirty(false); app.view2d.request(); app.view3d.rebuild(); queueSave(); };
     $('#wDel').onclick=()=>app.deleteWall(w);
     $('#wSplit').onclick=()=>{ if(w.locked){ toast('Unlock the wall to split it'); return; } app.pushUndo(); const mx=(w.x1+w.x2)/2,mz=(w.z1+w.z2)/2;
       const w2={...w,id:uid('w'),x1:mx,z1:mz}; w.x2=mx; w.z2=mz; fl.walls.push(w2);
@@ -1779,10 +1779,10 @@ function toColor(c){ if(!c) return '#ffffff'; if(/^#[0-9a-f]{6}$/i.test(c)) retu
 function renderFloorSel(){
   const sel=$('#floorSel'); sel.innerHTML='';
   app.state.floors.forEach((f,i)=>{
-    const o=document.createElement('option'); o.value=i; o.textContent=f.name;
-    if(i===app.state.activeFloor) o.selected=true;
+    const o=document.createElement('option'); o.value=String(i); o.textContent=f.name;
     sel.appendChild(o);
   });
+  sel.value=String(Math.max(0,Math.min(app.state.floors.length-1,app.state.activeFloor||0)));
   $('#floorName2d').textContent=app.curFloor().name;
   $('#floorName3d').textContent=app.curFloor().name;
   $('#wallHInput').value=app.state.settings.wallHeightDefault;
