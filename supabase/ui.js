@@ -295,10 +295,11 @@ async function autoTick() {
   if (!navigator.onLine) return;
   const now = Date.now();
   if (now - lastPushTry < 45000) return;
-  lastPushTry = now;
   try {
     const s = await syncState(appRef);
-    if (!s.loggedIn || (s.linked && !s.dirty)) return;
+    if (!s.loggedIn) return;
+    lastPushTry = now;
+    if (s.linked && !s.dirty) return;
     // Create the first cloud copy automatically after sign-in.
     await pushProject(appRef, { manual: false });
     autoSyncError = '';
