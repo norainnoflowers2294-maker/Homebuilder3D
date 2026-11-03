@@ -10,6 +10,10 @@ import { createProject } from '../store.js';
 const LS_MAP = 'hc.sb.map';       // { localPid: cloudUuid }
 const LS_HASH = 'hc.sb.hash.';    // last pushed hash per localPid
 const MAX_BACKUPS = 20;
+const SURFACE_TEXTURES_KEY = 'homecraft_surface_textures';
+function localSurfaceTextures() {
+  try { return JSON.parse(localStorage.getItem(SURFACE_TEXTURES_KEY) || '[]'); } catch (e) { return []; }
+}
 
 function loadMap() { try { return JSON.parse(localStorage.getItem(LS_MAP) || '{}'); } catch (e) { return {}; } }
 function saveMap(m) { try { localStorage.setItem(LS_MAP, JSON.stringify(m)); } catch (e) {} }
@@ -27,7 +31,8 @@ export function payloadHash(state, custom = []) {
     origName:c.origName||'',origFmt:c.origFmt||'',
     sidecars:(c.sidecars||[]).map(x=>({base:x.base,dataBytes:x.dataUrl?.length||0,kvKey:x.kvKey||''}))
   }));
-  const s = JSON.stringify({ house, models });
+  const textures = localSurfaceTextures().map(t=>({id:t.id,name:t.name,dataBytes:t.dataUrl?.length||0,assetRef:t.assetRef||''}));
+  const s = JSON.stringify({ house, models, textures });
   let h = 0x811c9dc5;
   for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193); }
   return (h >>> 0).toString(16) + ':' + s.length;
@@ -101,6 +106,44 @@ async function extractBinaries(sb, uid, custom) {
   return out;
 }
 
+async function extractSurfaceTextures(sb, uid) {
+  const textures=localSurfaceTextures(), out=[];
+  for(const t of textures){
+    const copy={...t};
+    if(typeof t.dataUrl==='string'&&t.dataUrl.startsWith('data:')){
+      const m=/^data:([^;,]+)?(;base64)?,(.*)$/s.exec(t.dataUrl);
+      if(!m) throw new Error('Could not read uploaded texture '+(t.name||t.id));
+      const mime=m[1]||'image/png';
+      const bytes=m[2]?Uint8Array.from(atob(m[3]),ch=>ch.charCodeAt(0)):new TextEncoder().encode(decodeURIComponent(m[3]));
+      const ext=/jpe?g/i.test(mime)?'jpg':/webp/i.test(mime)?'webp':'png';
+      const path=uid+'/textures/'+String(t.id||Date.now()).replace(/[^a-zA-Z0-9_-]/g,'_')+'.'+ext;
+      const {error}=await sb.storage.from('hc-assets').upload(path,bytes,{contentType:mime,upsert:true});
+      if(error) throw new Error('Texture upload failed: '+String(error.message||error));
+      const {error:registryError}=await sb.from('assets').upsert({owner_id:uid,kind:'texture',name:t.name||'Uploaded texture',mime,size_bytes:bytes.length,storage_path:path},{onConflict:'owner_id,storage_path'});
+      if(registryError) throw new Error('Texture registry failed: '+String(registryError.message||registryError));
+      delete copy.dataUrl; copy.assetRef=path;
+    }
+    out.push(copy);
+  }
+  return out;
+}
+async function resolveSurfaceTextures(sb, textures) {
+  const out=[];
+  for(const t of (textures||[])){
+    const copy={...t};
+    if(copy.assetRef&&!copy.dataUrl){
+      const {data,error}=await sb.storage.from('hc-assets').download(copy.assetRef);
+      if(error||!data) throw new Error('Could not download texture '+(copy.name||copy.id));
+      const bytes=new Uint8Array(await data.arrayBuffer()); let binary='';
+      for(let i=0;i<bytes.length;i+=0x8000) binary+=String.fromCharCode.apply(null,bytes.subarray(i,i+0x8000));
+      const mime=data.type||'image/png';
+      copy.dataUrl='data:'+mime+';base64,'+btoa(binary);
+    }
+    out.push(copy);
+  }
+  return out;
+}
+
 // Resolve storage pointers back into dataUrls (cached in-memory by caller).
 export async function resolveRefs(sb, custom, cache) {
   const out=[];
@@ -148,7 +191,8 @@ export async function pushProject(app, { manual = false } = {}) {
   const localPid = app.projectId;
   const name = (app.projectName && app.projectName()) || 'My House';
   const custom = await extractBinaries(sb, user.id, app.custom || []);
-  const doc = { v: 1, savedAt: Date.now(), state: app.state, custom };
+  const textures = await extractSurfaceTextures(sb, user.id);
+  const doc = { v: 1, savedAt: Date.now(), state: app.state, custom, textures };
   const map = loadMap();
   let uuid = map[localPid] || null;
   if (uuid) {
@@ -190,6 +234,8 @@ export async function pullProjectToLocal(app, cloudId, refCache) {
   const doc = data.data || {};
   if (!doc.state || !doc.state.floors) throw new Error('Cloud project has no house data.');
   const custom = await resolveRefs(sb, doc.custom || [], refCache);
+  const textures = await resolveSurfaceTextures(sb, doc.textures || []);
+  try { localStorage.setItem(SURFACE_TEXTURES_KEY, JSON.stringify(textures)); } catch (e) { throw new Error('Could not cache cloud textures on this device.'); }
   const missing = custom.filter(c => c._missing).length;
   const { createProject: mk } = await import('../store.js');
   const nid = mk('☁ ' + (data.name || 'House'), doc.state);
@@ -239,6 +285,8 @@ export async function restoreBackup(app, backupId, refCache) {
   if (error || !data) throw new Error('Backup not found or not yours.');
   if (!data.data || !data.data.state || !data.data.state.floors) throw new Error('Backup has no house data.');
   const custom = await resolveRefs(sb, data.data.custom || [], refCache);
+  const textures = await resolveSurfaceTextures(sb, data.data.textures || []);
+  try { localStorage.setItem(SURFACE_TEXTURES_KEY, JSON.stringify(textures)); } catch (e) { throw new Error('Could not cache restored textures on this device.'); }
   app.pushUndo();
   app.state = data.data.state;
   try {
