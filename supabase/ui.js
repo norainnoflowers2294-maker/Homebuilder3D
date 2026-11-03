@@ -167,7 +167,7 @@ async function doMagicLink() {
   const email = (document.querySelector('#sbEmail').value || '').trim();
   const msg = document.querySelector('#sbAuthMsg');
   const say = t => { if (msg) msg.textContent = t; };
-  if (!/^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$/.test(email)) { say('Enter your account email first.'); return; }
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { say('Enter a valid email address.'); return; }
   say('Sending your secure sign-in link…');
   try {
     await sendMagicLink(email);
