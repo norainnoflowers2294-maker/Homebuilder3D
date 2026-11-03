@@ -2,7 +2,7 @@
 // Injected into existing modals — no layout redesign.
 import { getBackendConfig, saveBackendConfig, clearBackendConfig, isBackendConfigured, probeBackend } from './client.js';
 import { signUp, signIn, signOut, sendRecovery, currentUser, getProfile, saveProfile, onAuthChange } from './auth.js';
-import { listCloudProjects, pushProject, pullProjectToLocal, deleteCloudProject, listBackups, syncState } from './projects.js?v=20261103n';
+import { listCloudProjects, pushProject, pullProjectToLocal, deleteCloudProject, listBackups, syncState } from './projects.js?v=20261103o';
 
 const refCache = new Map();
 let appRef = null, toastFn = null;
