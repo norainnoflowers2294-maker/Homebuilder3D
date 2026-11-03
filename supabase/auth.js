@@ -8,7 +8,10 @@ function errMsg(e, fallback) {
   if (/user already registered|already exists/i.test(m)) return 'That email already has an account — sign in instead.';
   if (/email not confirmed/i.test(m)) return 'Check your inbox and confirm your email first.';
   if (/password/i.test(m) && /weak|short|length/i.test(m)) return 'Password must be at least 6 characters.';
-  if (/rate limit|too many/i.test(m)) return 'Too many attempts — wait a minute and retry.';
+  if (/email address not authorized|not authorized/i.test(m)) return 'Supabase blocked this address because the project is still using its built-in test email sender. A custom SMTP email provider must be connected before it can send to regular users.';
+  if (/email address .*invalid|email_address_invalid/i.test(m)) return 'Supabase rejected this email address. Check the spelling and try again.';
+  if (/redirect.*(allow|url)|url.*not allowed|redirect_to/i.test(m)) return 'The sign-in link redirect is not allowed yet. Add the HomeCraft GitHub Pages URL in Supabase Auth → URL Configuration.';
+  if (/rate limit|too many|email rate limit/i.test(m)) return 'Supabase is limiting email requests. Wait at least 60 seconds before requesting another sign-in link.';
   return m || fallback || 'Auth failed.';
 }
 
