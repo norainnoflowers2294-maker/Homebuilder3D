@@ -1,6 +1,7 @@
 // Procedural 3D thumbnails for catalog cards: renders each def's mesh offscreen
 // with neutral studio lighting. Lazy + cached; falls back to a line icon.
-import * as THREE from 'three';
+let THREE = null;
+let threePromise = null;
 
 let renderer = null, scene = null, camera = null, keyL = null, fillL = null, hemi = null;
 const cache = new Map();   // defId -> dataURL (null = failed, use icon)
@@ -8,7 +9,11 @@ const inflight = new Set();
 let pumpScheduled = false;
 const queue = [];
 
-function ensure(){
+async function ensure(){
+  if(!THREE){
+    if(!threePromise) threePromise = import('three').then(mod => (THREE = mod)).catch(err => { threePromise = null; throw err; });
+    await threePromise;
+  }
   if(renderer) return;
   renderer = new THREE.WebGLRenderer({antialias:true, alpha:true, preserveDrawingBuffer:true});
   renderer.setSize(144,144);
@@ -49,8 +54,8 @@ function simpleH(){
   };
 }
 
-function renderDef(def){
-  ensure();
+async function renderDef(def){
+  await ensure();
   const g = new THREE.Group();
   const H = simpleH();
   def.build(g, THREE, H);
@@ -81,7 +86,7 @@ function renderDef(def){
   return url;
 }
 
-function pump(){
+async function pump(){
   pumpScheduled = false;
   let n = 0;
   while(queue.length && n < 2){
@@ -92,16 +97,16 @@ function pump(){
     try{
       let url = cache.has(def.id) ? cache.get(def.id) : undefined;
       if(url === undefined){
-        url = renderDef(def);
+        url = await renderDef(def);
         cache.set(def.id, url || null);
       }
       if(url && img.isConnected && img.dataset.thumbFor === def.id) img.src = url;
     }catch(e){ cache.set(def.id, null); }
-    inflight.delete(def.id);
+    finally { inflight.delete(def.id); }
   }
   if(queue.length && !pumpScheduled){
     pumpScheduled = true;
-    (window.requestIdleCallback || ((fn)=>setTimeout(fn, 50)))(pump, {timeout:300});
+    (window.requestIdleCallback || ((fn)=>setTimeout(fn, 50)))(()=>{ pump().catch(()=>{}); }, {timeout:300});
   }
 }
 
@@ -118,7 +123,7 @@ export function requestThumb(def, img){
   if(!queue.some(q=>q.def.id===def.id && q.img===img)) queue.push({def, img});
   if(!pumpScheduled){
     pumpScheduled = true;
-    (window.requestIdleCallback || ((fn)=>setTimeout(fn, 60)))(pump, {timeout:400});
+    (window.requestIdleCallback || ((fn)=>setTimeout(fn, 60)))(()=>{ pump().catch(()=>{}); }, {timeout:400});
   }
 }
 
@@ -131,10 +136,5 @@ export function thumbCached(def){
 export function thumbNow(def){
   if(!def) return null;
   if(def.thumb) return def.thumb;
-  if(cache.has(def.id)) return cache.get(def.id);
-  try{
-    const url=renderDef(def);
-    cache.set(def.id, url||null);
-    return url||null;
-  }catch(e){ cache.set(def.id, null); return null; }
+  return cache.get(def.id) || null;
 }
