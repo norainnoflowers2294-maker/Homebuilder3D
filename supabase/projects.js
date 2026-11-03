@@ -17,8 +17,17 @@ function lastHash(pid) { try { return localStorage.getItem(LS_HASH + pid) || '';
 function setLastHash(pid, h) { try { localStorage.setItem(LS_HASH + pid, h); } catch (e) {} }
 
 // FNV-1a over the serialised payload — cheap dirty check for autosave.
-export function payloadHash(state) {
-  const s = JSON.stringify(state && state.floors ? { f: state.floors, s: state.settings } : state);
+export function payloadHash(state, custom = []) {
+  const house = state && state.floors ? { f: state.floors, s: state.settings } : state;
+  const models = (custom || []).map(c => ({
+    id:c.id,name:c.name,fmt:c.fmt,cat:c.cat,sub:c.sub,room:c.room,
+    w:c.w,d:c.d,h:c.h,fileHash:c.fileHash,
+    dataBytes:c.dataUrl?.length||0,kvKey:c.kvKey||'',
+    origBytes:c.origDataUrl?.length||0,origKvKey:c.origKvKey||'',
+    origName:c.origName||'',origFmt:c.origFmt||'',
+    sidecars:(c.sidecars||[]).map(x=>({base:x.base,dataBytes:x.dataUrl?.length||0,kvKey:x.kvKey||''}))
+  }));
+  const s = JSON.stringify({ house, models });
   let h = 0x811c9dc5;
   for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193); }
   return (h >>> 0).toString(16) + ':' + s.length;
@@ -41,26 +50,51 @@ export async function cloudUuidFor(localPid) { return loadMap()[localPid] || nul
 // Split custom-model binaries out of the pushed doc (binaries -> storage).
 async function extractBinaries(sb, uid, custom) {
   const out = [];
-  for (const c of (custom || [])) {
-    const copy = { ...c };
-    const du = c.dataUrl;
+  const kv = globalThis.root?.kv;
+  async function uploadField(owner, dataField, keyField, refField, suffix, baseName, fmt) {
+    let bytes = null, mime = 'application/octet-stream';
+    const du = owner[dataField];
     if (typeof du === 'string' && du.startsWith('data:')) {
       const m = /^data:([^;,]+)?(;base64)?,(.*)$/s.exec(du);
       if (m) {
-        const mime = m[1] || 'model/gltf-binary';
-        const ext = /gltf/i.test(mime) ? 'gltf' : /obj/i.test(mime) ? 'obj' : /stl/i.test(mime) ? 'stl' : /zip/i.test(mime) ? 'zip' : 'glb';
-        const path = uid + '/models/' + (c.id || ('m' + Date.now())) + '.' + ext;
-        const bytes = Uint8Array.from(atob(m[3]), ch => ch.charCodeAt(0));
-        const { error } = await sb.storage.from('hc-assets').upload(path, bytes, { contentType: mime, upsert: true });
-        if (error) throw new Error('Asset upload failed: ' + String(error.message || error));
-        try {
-          await sb.from('assets').upsert(
-            { owner_id: uid, kind: 'model', name: c.name || c.id, mime, size_bytes: bytes.length, storage_path: path },
-            { onConflict: 'owner_id,storage_path' });
-        } catch (e) {}
-        delete copy.dataUrl;
-        copy.assetRef = path;
+        mime = m[1] || mime;
+        if (m[2]) bytes = Uint8Array.from(atob(m[3]), ch => ch.charCodeAt(0));
+        else bytes = new TextEncoder().encode(decodeURIComponent(m[3]));
       }
+    } else if (owner[keyField]) {
+      if (!kv?.models) throw new Error('A large model is stored in this browser, but its local model storage is unavailable. Reopen the app on the device where it was uploaded and retry cloud sync.');
+      const value = await kv.models.get(owner[keyField]);
+      if (!value) throw new Error('Could not read local model file '+String(owner[keyField])+'.');
+      bytes = value instanceof Uint8Array ? value : new Uint8Array(value);
+    }
+    if (!bytes) {
+      if (owner[refField]) return owner[refField];
+      return null;
+    }
+    const ext = String(fmt || '').toLowerCase().replace(/^\\./,'').match(/^(glb|gltf|obj|fbx|stl|3ds|zip|bin)$/)?.[1] || 'bin';
+    const path = uid + '/models/' + String(baseName || 'model').replace(/[^a-zA-Z0-9_-]/g,'_') + suffix + '.' + ext;
+    const { error } = await sb.storage.from('hc-assets').upload(path, bytes, { contentType:mime, upsert:true });
+    if (error) throw new Error('3D asset upload failed ('+(baseName||'model')+'): '+String(error.message||error));
+    const { error: registryError } = await sb.from('assets').upsert(
+      { owner_id:uid,kind:'model',name:owner.name||baseName||'3D model',mime,size_bytes:bytes.length,storage_path:path },
+      { onConflict:'owner_id,storage_path' });
+    if (registryError) throw new Error('Asset registry failed: '+String(registryError.message||registryError));
+    delete owner[dataField]; delete owner[keyField];
+    owner[refField]=path;
+    return path;
+  }
+  for (const c of (custom || [])) {
+    const copy = { ...c };
+    await uploadField(copy,'dataUrl','kvKey','assetRef','',c.id||c.name,c.fmt);
+    await uploadField(copy,'origDataUrl','origKvKey','origAssetRef','_original',c.id||c.name,c.origFmt||c.fmt);
+    if (Array.isArray(copy.sidecars)) {
+      const sidecars=[];
+      for (let i=0;i<copy.sidecars.length;i++) {
+        const side={...copy.sidecars[i]};
+        await uploadField(side,'dataUrl','kvKey','assetRef','_sidecar_'+i,(c.id||'model')+'_'+(side.base||i),side.base?.split('.').pop());
+        sidecars.push(side);
+      }
+      copy.sidecars=sidecars;
     }
     out.push(copy);
   }
@@ -69,18 +103,40 @@ async function extractBinaries(sb, uid, custom) {
 
 // Resolve storage pointers back into dataUrls (cached in-memory by caller).
 export async function resolveRefs(sb, custom, cache) {
-  const out = [];
-  for (const c of (custom || [])) {
-    if (c.dataUrl || !c.assetRef) { out.push(c); continue; }
-    const hit = cache && cache[c.assetRef];
-    if (hit) { out.push({ ...c, dataUrl: hit }); continue; }
-    const { data, error } = await sb.storage.from('hc-assets').download(c.assetRef);
-    if (error || !data) { out.push({ ...c, _missing: true }); continue; }
-    const du = await new Promise(res => {
-      const fr = new FileReader(); fr.onload = () => res(fr.result); fr.onerror = () => res(null); fr.readAsDataURL(data);
-    });
-    if (du && cache) cache[c.assetRef] = du;
-    out.push(du ? { ...c, dataUrl: du } : { ...c, _missing: true });
+  const out=[];
+  const kv=globalThis.root?.kv;
+  async function restore(owner,refField,dataField,keyField,cacheKey) {
+    const path=owner[refField];
+    if(!path) return;
+    const cached=cache&&cache[path];
+    if(cached){ owner[dataField]=cached; return; }
+    const {data,error}=await sb.storage.from('hc-assets').download(path);
+    if(error||!data){ owner._missing=true; return; }
+    const bytes=new Uint8Array(await data.arrayBuffer());
+    if(kv?.models){
+      const key='cloud_'+String(cacheKey||'asset').replace(/[^a-zA-Z0-9_-]/g,'_');
+      await kv.models.set(key,bytes);
+      owner[keyField]=key;
+    }else{
+      let binary=''; const chunk=0x8000;
+      for(let i=0;i<bytes.length;i+=chunk) binary+=String.fromCharCode.apply(null,bytes.subarray(i,i+chunk));
+      owner[dataField]='data:application/octet-stream;base64,'+btoa(binary);
+    }
+  }
+  for(const item of (custom||[])){
+    const c={...item};
+    await restore(c,'assetRef','dataUrl','kvKey',c.id);
+    await restore(c,'origAssetRef','origDataUrl','origKvKey',(c.id||'')+'_original');
+    if(Array.isArray(c.sidecars)){
+      const sides=[];
+      for(let i=0;i<c.sidecars.length;i++){
+        const side={...c.sidecars[i]};
+        await restore(side,'assetRef','dataUrl','kvKey',(c.id||'')+'_sidecar_'+i);
+        sides.push(side);
+      }
+      c.sidecars=sides;
+    }
+    out.push(c);
   }
   return out;
 }
@@ -112,7 +168,7 @@ export async function pushProject(app, { manual = false } = {}) {
     uuid = data.id;
     map[localPid] = uuid; saveMap(map);
   }
-  setLastHash(localPid, payloadHash(app.state));
+  setLastHash(localPid, payloadHash(app.state, app.custom));
   // Read-back: prove the write actually landed before callers claim success.
   try {
     const { data: back, error: backErr } = await sb.from('projects').select('data').eq('id', uuid).single();
@@ -216,7 +272,7 @@ export async function syncState(app) {
     if (!uuid) return { loggedIn: true, linked: false };
     const { data, error } = await sb.from('projects').select('updated_at').eq('id', uuid).maybeSingle();
     if (error || !data) return { loggedIn: true, linked: false };
-    const dirty = payloadHash(app.state) !== lastHash(app.projectId);
+    const dirty = payloadHash(app.state, app.custom) !== lastHash(app.projectId);
     return { loggedIn: true, linked: true, cloudUpdatedAt: data.updated_at, dirty };
   } catch (e) { return { loggedIn: false, error: true }; }
 }
