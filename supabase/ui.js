@@ -296,7 +296,8 @@ async function autoTick() {
   lastPushTry = now;
   try {
     const s = await syncState(appRef);
-    if (!s.loggedIn || !s.linked || !s.dirty) return;
+    if (!s.loggedIn || (s.linked && !s.dirty)) return;
+    // Create the first cloud copy automatically after sign-in.
     await pushProject(appRef, { manual: false });
     const veil = document.querySelector('#settingsVeil');
     if (veil && veil.classList.contains('on')) refreshStatus();
@@ -309,7 +310,7 @@ export function initBackendUI(app, toast) {
   mountMenu();
   (async () => {
     try {
-      const unsub = await onAuthChange(() => { renderMenu(false); refreshStatus(); });
+      const unsub = await onAuthChange(() => { renderMenu(false); refreshStatus(); autoTick(); });
       window.addEventListener('pagehide', () => { try { unsub(); } catch (e) {} });
     } catch (e) { /* backend not configured yet — mounts retry on save */ }
   })();
