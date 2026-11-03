@@ -1,0 +1,7 @@
+{
+  "name": "HomeCraft 3D",
+  "description": "Luxury architectural design studio and 3D home builder with 2D plan and 3D walk modes, infinite floors, procedural textures, and AI tools.",
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

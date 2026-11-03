@@ -1,0 +1,14 @@
+{
+  "name": "homecraft-3d",
+  "version": "1.0.0",
+  "description": "Luxury architectural design studio and 3D home builder",
+  "type": "module",
+  "scripts": {
+    "dev": "node server.js",
+    "start": "node server.js",
+    "build": "echo 'Static build ready'"
+  },
+  "dependencies": {
+    "express": "^4.21.2"
+  }
+}
