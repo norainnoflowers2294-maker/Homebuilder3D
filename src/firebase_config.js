@@ -1,0 +1,12 @@
+// Public Google/Firebase web configuration for HomeCraft 3D.
+export default {
+  projectId: "gen-lang-client-0917897019",
+  appId: "1:140064835597:web:1d516ddae820b74035ed44",
+  apiKey: "AIzaSyBwvftxpvldExTxGGWKPIBS7hBHVWleJTE",
+  authDomain: "gen-lang-client-0917897019.firebaseapp.com",
+  storageBucket: "gen-lang-client-0917897019.firebasestorage.app",
+  messagingSenderId: "140064835597",
+  measurementId: "",
+  oAuthClientId: "140064835597-rhmc0sdt9eurpbng7erg795u10as15ml.apps.googleusercontent.com",
+  recaptchaSiteKey: ""
+};
