@@ -1,7 +1,7 @@
 // Google Authentication & Profile Management for HomeCraft 3D
 // Uses pre-configured Google OAuth Client from firebase-applet-config.json
 
-import config from './firebase-applet-config.json' with { type: 'json' };
+import config from '../firebase-applet-config.json' with { type: 'json' };
 
 const LS_USER = 'homecraft_google_user';
 const SCOPES = 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email openid email profile';
