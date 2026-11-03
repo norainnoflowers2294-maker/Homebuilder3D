@@ -12,6 +12,7 @@ import { initDropbox } from './dropbox.js';
 import { initBackendUI } from '../supabase/ui.js';
 import { googleAuth } from './google_auth.js';
 import { sound } from './sound.js';
+import { OPENROUTER_MODELS, getBlueprintModel, setBlueprintModel, testOpenRouterConnection } from './openrouter.js';
 
 const $=s=>document.querySelector(s);
 function toast(m,ms=2200){ const t=$('#toast'); t.textContent=m; t.style.display='block'; clearTimeout(t._h); t._h=setTimeout(()=>t.style.display='none',ms); }
@@ -2488,6 +2489,30 @@ function wire(){
   $('#veraGo').onclick=()=>window.open('https://veras.evolvelab.io','_blank');
   $('#veraBack').onclick=()=>{ $('#veraVeil').classList.remove('on'); $('#meshFile').click(); };
   $('#newHouseBtn').onclick=()=>{ if(!confirm('Create a new empty house project? Your current house stays saved.'))return; app.newProject('blank'); };
+  // OpenRouter model preference is stored on this device and used by blueprint AI calls.
+  const aiModelSel=$('#openRouterModelSel'), aiModelStatus=$('#openRouterModelStatus'), aiModelTest=$('#openRouterTestBtn');
+  if(aiModelSel){
+    aiModelSel.innerHTML=OPENROUTER_MODELS.map(m=>'<option value="'+m.id+'">'+m.label+'</option>').join('');
+    aiModelSel.value=getBlueprintModel();
+    aiModelSel.onchange=()=>{
+      const selected=setBlueprintModel(aiModelSel.value);
+      if(aiModelStatus) aiModelStatus.textContent='Saved. New blueprint AI requests will use '+(OPENROUTER_MODELS.find(m=>m.id===selected)?.label||selected)+'.';
+      toast('OpenRouter model saved');
+    };
+  }
+  if(aiModelTest) aiModelTest.onclick=async()=>{
+    aiModelTest.disabled=true; aiModelTest.textContent='Testing…';
+    if(aiModelStatus) aiModelStatus.textContent='Checking the selected model through your secure Supabase connection…';
+    try{
+      const result=await testOpenRouterConnection(aiModelSel?.value||getBlueprintModel());
+      if(aiModelStatus) aiModelStatus.textContent='Connected. Model replied successfully: '+(result.model||getBlueprintModel());
+      toast('OpenRouter connection works');
+    }catch(err){
+      if(aiModelStatus) aiModelStatus.textContent='Test failed: '+String(err.message||err).slice(0,220);
+      toast('OpenRouter test failed');
+    }finally{ aiModelTest.disabled=false; aiModelTest.textContent='Test selected model'; }
+  };
+
   $('#demoHouseBtn').onclick=()=>{ if(!confirm('Create a demo villa project? Your current house stays saved.'))return; app.newProject('demo'); };
   $('#snapSel').onchange=e=>{ app.state.settings.snap=+e.target.value; $('#snapVal').textContent=Math.round(app.state.settings.snap*100)+'cm'; queueSave(); };
   const snap2=$('#snapSel2'); if(snap2){ snap2.value=String(app.state.settings.snap||0.25); snap2.onchange=e=>{ app.state.settings.snap=+e.target.value; $('#snapSel').value=e.target.value; $('#snapVal').textContent=Math.round(app.state.settings.snap*100)+'cm'; queueSave(); }; }
