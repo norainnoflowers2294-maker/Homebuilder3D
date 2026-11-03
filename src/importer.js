@@ -137,6 +137,15 @@ async function makeThumbnail(obj, THREE) {
 
 export async function importModelFile(file, THREE, onProgress) {
   if (!file) throw new Error('No file was selected.');
+  // The upload screen can open before the 3D renderer has finished initializing.
+  // Load the same Three.js version directly rather than assuming view3d.THREE exists.
+  if (!THREE || typeof THREE.LoadingManager !== 'function') {
+    try { THREE = await import('https://esm.sh/three@0.187.0'); }
+    catch (err) { throw new Error('Three.js could not be loaded for the model importer. Check your internet connection and try again.'); }
+  }
+  if (typeof THREE.LoadingManager !== 'function' || typeof THREE.Box3 !== 'function') {
+    throw new Error('The 3D engine did not initialize correctly. Close the upload window, reload HomeCraft 3D, and try again.');
+  }
   const started = performance.now();
   const srcFile = file.name || 'model';
   const srcExt = srcFile.split('.').pop().toLowerCase();
