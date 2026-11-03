@@ -82,12 +82,13 @@ async function refreshStatus(root) {
     } catch (e) { backups = 'unavailable'; }
   }
   const syncTxt = !user ? 'local only (sign in to sync)'
-    : !sync.linked ? 'this house is local-only — save to cloud to link it'
+    : !sync.linked ? 'first cloud copy is being created automatically'
     : sync.dirty ? 'cloud copy behind — unsaved changes on this device'
     : 'in sync' + (sync.cloudUpdatedAt ? ' (cloud ' + new Date(sync.cloudUpdatedAt).toLocaleString() + ')' : '');
   box.innerHTML = row('Backend', 'connected')
     + row('User', user ? esc(user.email) : 'signed out')
     + row('Sync', esc(syncTxt))
+    + (autoSyncError ? row('Cloud sync error', esc(autoSyncError)) : '')
     + row('Backups', esc(backups));
 }
 
@@ -288,6 +289,7 @@ async function cloudDelete(cloudId, name) {
 }
 
 let lastPushTry = 0;
+let autoSyncError = '';
 async function autoTick() {
   if (!appRef || !isBackendConfigured()) return;
   if (!navigator.onLine) return;
@@ -299,9 +301,14 @@ async function autoTick() {
     if (!s.loggedIn || (s.linked && !s.dirty)) return;
     // Create the first cloud copy automatically after sign-in.
     await pushProject(appRef, { manual: false });
+    autoSyncError = '';
     const veil = document.querySelector('#settingsVeil');
     if (veil && veil.classList.contains('on')) refreshStatus();
-  } catch (e) { /* silent; manual save + status panel surface errors */ }
+  } catch (e) {
+    autoSyncError = String((e && e.message) || e || 'Unknown cloud sync error');
+    const veil = document.querySelector('#settingsVeil');
+    if (veil && veil.classList.contains('on')) refreshStatus();
+  }
 }
 
 export function initBackendUI(app, toast) {
