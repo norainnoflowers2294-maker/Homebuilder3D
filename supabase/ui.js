@@ -1,7 +1,7 @@
 // Backend UI for HomeCraft 3D: Settings status + Menu auth/cloud panel.
 // Injected into existing modals — no layout redesign.
 import { getBackendConfig, saveBackendConfig, clearBackendConfig, isBackendConfigured, probeBackend } from './client.js';
-import { signUp, signIn, signOut, sendRecovery, currentUser, getProfile, saveProfile, onAuthChange } from './auth.js';
+import { signUp, signIn, sendMagicLink, signOut, sendRecovery, currentUser, getProfile, saveProfile, onAuthChange } from './auth.js';
 import { listCloudProjects, pushProject, pullProjectToLocal, deleteCloudProject, listBackups, syncState } from './projects.js?v=20261103o';
 
 const refCache = new Map();
@@ -134,12 +134,14 @@ async function renderMenu(forceList) {
         <input id="sbPass" type="password" class="txtInput" style="flex:1;min-width:120px" placeholder="password" autocomplete="current-password">
       </div>
       <div class="rowBtns" style="margin-top:6px">
-        <button class="btn small primary" id="sbSignIn">Sign in</button>
+        <button class="btn small primary" id="sbSignIn">Sign in with password</button>
+        <button class="btn small" id="sbMagicLink">Email me a sign-in link</button>
         <button class="btn small" id="sbSignUp">Create account</button>
         <button class="btn small" id="sbForgot">Forgot password</button>
       </div>
       <div class="sub" id="sbAuthMsg"></div>`;
     body.querySelector('#sbSignIn').onclick = () => doAuth('in');
+    body.querySelector('#sbMagicLink').onclick = doMagicLink;
     body.querySelector('#sbSignUp').onclick = () => doAuth('up');
     body.querySelector('#sbForgot').onclick = doForgot;
     if (list) list.innerHTML = '';
@@ -159,6 +161,18 @@ async function renderMenu(forceList) {
     catch (e) { toastFn && toastFn('Profile failed: ' + String((e && e.message) || e)); }
   };
   if (forceList || (list && !list.dataset.loaded)) await renderCloudList();
+}
+
+async function doMagicLink() {
+  const email = (document.querySelector('#sbEmail').value || '').trim();
+  const msg = document.querySelector('#sbAuthMsg');
+  const say = t => { if (msg) msg.textContent = t; };
+  if (!/^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$/.test(email)) { say('Enter your account email first.'); return; }
+  say('Sending your secure sign-in link…');
+  try {
+    await sendMagicLink(email);
+    say('Sign-in email sent. Open it on this iPhone and tap the sign-in button. HomeCraft will reopen and sign you in automatically.');
+  } catch (e) { say(String((e && e.message) || e)); }
 }
 
 async function doAuth(mode) {
@@ -318,7 +332,10 @@ export function initBackendUI(app, toast) {
   mountMenu();
   (async () => {
     try {
-      const unsub = await onAuthChange(() => { renderMenu(false); refreshStatus(); autoTick(); });
+      const unsub = await onAuthChange((event, user) => {
+        renderMenu(false); refreshStatus();
+        if (user && (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED')) autoTick();
+      });
       window.addEventListener('pagehide', () => { try { unsub(); } catch (e) {} });
     } catch (e) { /* backend not configured yet — mounts retry on save */ }
   })();
@@ -336,6 +353,10 @@ export function initBackendUI(app, toast) {
       } catch (e) {}
       try { history.replaceState(null, '', location.pathname + location.search); } catch (e) {}
     })();
+  }
+  // Supabase persists the verified email-link session in Safari local storage.
+  if (location.search.includes('code=') || location.hash.includes('access_token=')) {
+    setTimeout(() => { try { history.replaceState(null, '', location.pathname); } catch (e) {} }, 1800);
   }
   if (!statusTimer) statusTimer = setInterval(autoTick, 20000);
   window.addEventListener('online', () => autoTick());
