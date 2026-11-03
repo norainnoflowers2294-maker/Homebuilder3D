@@ -7,6 +7,10 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 const LS_URL = 'hc.sb.url';
 const LS_KEY = 'hc.sb.key';
 const LS_UID = 'hc.sb.uid';
+const LS_DISABLED = 'hc.sb.disabled';
+// Public Supabase publishable key. Safe for browser use when RLS is enabled.
+const DEFAULT_URL = 'https://xvwbqswmgwprtbqfhjuy.supabase.co';
+const DEFAULT_KEY = 'sb_publishable_WyNTlLFiGJG57m1XCMnMaA_vqMyj9jW';
 
 let client = null;
 let clientFor = '';
@@ -29,11 +33,12 @@ export function saveBackendConfig(url, key) {
   try {
     localStorage.setItem(LS_URL, (url || '').trim().replace(/\/+$/, ''));
     localStorage.setItem(LS_KEY, (key || '').trim());
+    localStorage.removeItem(LS_DISABLED);
   } catch (e) {}
   client = null; clientFor = '';
 }
 export function clearBackendConfig() {
-  try { localStorage.removeItem(LS_URL); localStorage.removeItem(LS_KEY); localStorage.removeItem(LS_UID); } catch (e) {}
+  try { localStorage.removeItem(LS_URL); localStorage.removeItem(LS_KEY); localStorage.removeItem(LS_UID); localStorage.setItem(LS_DISABLED, '1'); } catch (e) {}
   client = null; clientFor = '';
 }
 
