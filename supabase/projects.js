@@ -31,7 +31,7 @@ export function payloadHash(state, custom = []) {
     origName:c.origName||'',origFmt:c.origFmt||'',
     sidecars:(c.sidecars||[]).map(x=>({base:x.base,dataBytes:x.dataUrl?.length||0,kvKey:x.kvKey||''}))
   }));
-  const textures = localSurfaceTextures().map(t=>({id:t.id,name:t.name,dataBytes:t.dataUrl?.length||0,assetRef:t.assetRef||''}));
+  const textures = localSurfaceTextures().map(t=>({id:t.id,name:t.name,data:t.dataUrl||'',assetRef:t.assetRef||''}));
   const s = JSON.stringify({ house, models, textures });
   let h = 0x811c9dc5;
   for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193); }
