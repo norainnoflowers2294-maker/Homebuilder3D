@@ -633,12 +633,10 @@ class App {
     const st=this.state;
     const selOf=h=>v.selOf(h.object);
     const groundHit=()=>{
-      for(const h of hits){
-        const f=selOf(h);
-        if(f&&(f.sel.type==='slab'||f.sel.type==='zone')) return {x:h.point.x,z:h.point.z,floor:f.sel.floor};
-        if(h.object.geometry&&h.object.geometry.type==='CircleGeometry') return {x:h.point.x,z:h.point.z,floor:st.activeFloor};
-      }
-      return {x:hits[0].point.x,z:hits[0].point.z,floor:st.activeFloor};
+      // The floor picker is authoritative in multi-storey homes.
+      const fi=Math.max(0,Math.min(st.floors.length-1,Number(st.activeFloor)||0));
+      const hit=hits.find(h=>{ const f=selOf(h); return f&&(f.sel.type==='slab'||f.sel.type==='zone')&&f.sel.floor===fi; })||hits[0];
+      return {x:hit.point.x,z:hit.point.z,floor:fi};
     };
     if(this.tool==='paint'){ const g=groundHit(); this.paintAt(g.x,g.z); return; }
     if(this.tool==='zone'||this.tool==='patio'){
@@ -1553,7 +1551,8 @@ app.refreshSelPanel=function(){
     const curTex=w.finish?.tex||null;
     if(!app._finishScope) app._finishScope='wall';
     p.innerHTML=`<h4>${icon('brick-wall')} Wall • ${L} m ${w.locked?icon('lock'):''}</h4><div class="sub">${w.locked?'This wall is <b>locked</b> — unlock to edit.':'Drag the wall or its round endpoints in 2D to resize the room.'}</div>
-      <label class="f">Height <input type="range" id="wH" min="2" max="5" step="0.1" value="${w.h||2.7}" ${w.locked?'disabled':''}> <b id="wHv">${(w.h||2.7).toFixed(1)}m</b></label>
+      <label class="f">Height <input type="range" id="wH" min="0.5" max="5" step="0.1" value="${w.h||2.7}" ${w.locked?'disabled':''}> <b id="wHv">${(w.h||2.7).toFixed(1)}m</b></label>
+      <div class="rowBtns"><button class="btn small" id="wHalf" ${w.locked?'disabled':''}>Set half wall (1.1m)</button><button class="btn small" id="wFull" ${w.locked?'disabled':''}>Full height</button></div>
       <label class="f">Thick <input type="range" id="wT" min="0.05" max="0.5" step="0.01" value="${w.t||0.15}" ${w.locked?'disabled':''}> <b id="wTv">${(w.t||0.15).toFixed(2)}m</b></label>
       <label class="f">Color <input type="color" id="wC" value="${toColor(w.color)}" ${w.locked?'disabled':''}></label>
       <button class="btn small primary" id="wOpenTexMenu" type="button" style="width:100%;margin:6px 0;display:flex;align-items:center;justify-content:center;gap:6px;"><i data-lucide="palette"></i> All Textures &amp; Colors Menu</button>
@@ -1590,6 +1589,9 @@ app.refreshSelPanel=function(){
     $('#wCopy').onclick=()=>app.copyStyle();
     $('#wPaste').onclick=()=>app.pasteStyle();
     $('#wLock').onclick=()=>{ w.locked=!w.locked; saveState(app.state); app.syncAll(); toast(w.locked?'Wall locked — it can’t be moved or deleted':'Wall unlocked'); };
+    const setWallHeight=value=>{ if(w.locked) return; app.pushUndo(); w.h=value; $('#wH').value=value; $('#wHv').textContent=value.toFixed(1)+'m'; app.view2d.request(); app.view3d.rebuild(); queueSave(); };
+    $('#wHalf').onclick=()=>setWallHeight(1.1);
+    $('#wFull').onclick=()=>setWallHeight(app.state.settings.wallHeightDefault||fl.wallHeight||2.7);
     $('#wH').oninput=e=>{ w.h=+e.target.value; $('#wHv').textContent=(+e.target.value).toFixed(1)+'m'; app.dirty(false); app.view2d.request(); app.view3d.rebuild(); queueSave(); };
     $('#wT').oninput=e=>{ w.t=+e.target.value; $('#wTv').textContent=(+e.target.value).toFixed(2)+'m'; app.dirty(false); app.view2d.request(); app.view3d.rebuild(); queueSave(); };
     $('#wC').oninput=e=>{ w.color=e.target.value; app.dirty(false); app.view2d.request(); app.view3d.rebuild(); queueSave(); };
@@ -2023,6 +2025,56 @@ function uniqueCustomName(name){
   let i=2; while(taken.has((name+' ('+i+')').toLowerCase())) i++;
   return name+' ('+i+')';
 }
+async function modelFileHash(file){
+  const bytes=await file.arrayBuffer();
+  if(globalThis.crypto?.subtle){
+    const digest=await crypto.subtle.digest('SHA-256',bytes);
+    return Array.from(new Uint8Array(digest)).map(x=>x.toString(16).padStart(2,'0')).join('');
+  }
+  return file.name.toLowerCase()+'|'+file.size+'|'+file.lastModified;
+}
+async function bulkUploadModels(fileList){
+  const files=Array.from(fileList||[]).filter(f=>/\.(glb|gltf|obj|fbx|stl|3ds|zip)$/i.test(f.name));
+  if(!files.length){ toast('Choose supported 3D files first'); return; }
+  $('#uploadVeil').classList.add('on'); $('#menuVeil').classList.remove('on');
+  $('#bulkMeshFiles').value='';
+  let added=0, skipped=0, failed=0;
+  const seen=new Set(app.custom.map(c=>c.fileHash).filter(Boolean));
+  for(let i=0;i<files.length;i++){
+    const file=files[i];
+    try{
+      setUploadStatus('<div class="spin" style="margin:8px auto"></div>Bulk upload '+(i+1)+' of '+files.length+': '+file.name.replace(/</g,'&lt;'));
+      const hash=await modelFileHash(file);
+      const already=app.custom.some(c=>c.fileHash===hash || (!c.fileHash&&String(c.origName||'').toLowerCase()===file.name.toLowerCase()));
+      if(seen.has(hash)||already){ skipped++; continue; }
+      const imp=await import('./importer.js?v=20261103e');
+      const res=await imp.importModelFile(file,app.view3d.THREE,()=>{});
+      const guess=imp.guessFromName(res.baseName)||{};
+      const id=uid('m'), fmt=res.optimized?'glb':res.srcExt;
+      const body=await persistBytes(id+'_body',res.optimized||res.originalBytes);
+      const dims=res.dims||{w:1,d:1,h:1};
+      const rec={id,name:uniqueCustomName(res.baseName||file.name.split('.').slice(0,-1).join('.')),fmt,
+        cat:guess.cat||'decor',sub:guess.sub||'',room:guess.room||'Living room',
+        desc:'Imported 3D model',w:+dims.w||1,d:+dims.d||1,h:+dims.h||1,
+        rotY:0,thumb:res.thumb||null,fileHash:hash,origName:file.name,fileBytes:file.size,sx:1,sy:1,sz:1};
+      Object.assign(rec,body);
+      if(res.optimized){
+        try{ const orig=await persistBytes(id+'_orig',res.originalBytes); rec.origFmt=res.srcExt; if(orig.dataUrl) rec.origDataUrl=orig.dataUrl; else rec.origKvKey=orig.kvKey; }catch(e){}
+      }
+      if(!res.optimized&&res.allFiles?.length>1){
+        rec.sidecars=[]; rec.srcFile=res.srcFile;
+        for(const f of res.allFiles){ try{ const p=await persistBytes(id+'_s_'+f.base.toLowerCase().replace(/[^a-z0-9._-]+/g,'_'),f.bytes); rec.sidecars.push({base:f.base,...p}); }catch(e){} }
+        if(!rec.sidecars.length) delete rec.sidecars;
+      }
+      app.custom.push(rec); seen.add(hash); added++;
+      saveCustom(app.custom);
+      await app.loadCustomTemplate(rec);
+    }catch(err){ failed++; console.warn('bulk model import failed',file.name,err); }
+  }
+  saveCustom(app.custom); app._renderGrid?.();
+  setUploadStatus('Bulk upload finished: '+added+' added, '+skipped+' duplicates skipped, '+failed+' failed. Models were sorted into suggested categories. You can close this window.');
+  toast(added+' models added · '+skipped+' duplicates skipped');
+}
 async function saveUploadReview(){
   const up=app._upload; if(!up?.res) return;
   const btn=$('#upSave'); btn.disabled=true;
@@ -2058,6 +2110,11 @@ async function saveUploadReview(){
       }
       if(!rec.sidecars.length) delete rec.sidecars;
     }
+    const hash=await modelFileHash(up.file);
+    if(app.custom.some(c=>c.fileHash===hash || (!c.fileHash&&String(c.origName||'').toLowerCase()===up.file.name.toLowerCase()))){
+      toast('That model is already in My Models'); btn.disabled=false; return;
+    }
+    rec.fileHash=hash; rec.origName=up.file.name; rec.fileBytes=up.file.size;
     app.custom.push(rec); saveCustom(app.custom);
     await app.loadCustomTemplate(rec);
     app._renderGrid?.();
@@ -2449,6 +2506,8 @@ function wire(){
   for(const id of ['upName','upSub','upRoom']) $('#'+id).addEventListener('input',e=>{ e.target.dataset.touched='1'; });
   $('#upAI').onclick=()=>aiIdentifyUpload(false);
   $('#upCancel').onclick=()=>{ app._upload=null; $('#uploadVeil').classList.remove('on'); };
+  const bulkBtn=$('#upBulkBtn'), bulkInput=$('#bulkMeshFiles');
+  if(bulkBtn&&bulkInput){ bulkBtn.onclick=()=>bulkInput.click(); bulkInput.onchange=e=>{ if(e.target.files?.length) bulkUploadModels(e.target.files); }; }
   $('#upSave').onclick=saveUploadReview;
   // ---- Room AI designer ----
   $('#designBtn').onclick=()=>{ $('#menuVeil').classList.remove('on'); refreshDesignRoom(); $('#designVeil').classList.add('on'); };
