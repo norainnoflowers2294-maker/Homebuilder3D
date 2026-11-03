@@ -304,6 +304,16 @@ export class View3D {
     const cv=this.cv;
     cv.addEventListener('pointerdown',e=>{
       this._downPos={x:e.clientX,y:e.clientY}; this._moved=false; this._drag3d=null;
+      this._pressedSel=null;
+      // Remember the object under the finger. Mobile taps can drift a few pixels,
+      // and active tools must not swallow the selection action.
+      try{
+        const {hits}=this.raycastAt(e.clientX,e.clientY);
+        for(const h of hits){
+          const found=this.selOf(h.object);
+          if(found && found.sel.type==='item'){ this._pressedSel={...found.sel}; break; }
+        }
+      }catch(err){}
       if((this.app.tool==='select'||this.app.tool==='move')&&!this.app.pendingDef) this._maybeDrag(e);
     });
     cv.addEventListener('pointermove',e=>{
@@ -317,20 +327,25 @@ export class View3D {
       else if(!e.buttons) this._updateGhost(e);
     });
     const up=e=>{
-      if(this._downPos && !this._moved){ this.tap(e.clientX,e.clientY); }
+      const pressed=this._pressedSel;
+      const moved=this._moved;
+      if(this._downPos && !moved){ this.tap(e.clientX,e.clientY); }
       this._downPos=null;
+      this._pressedSel=null;
       if(this._drag3d){
-        const moved=this._moved, d=this._drag3d;
+        const d=this._drag3d;
         this._drag3d=null;
         if(this.mode==='orbit') this.controls.enabled=true;
         this.hideGhost();
-        // A drag used to leave selection in quiet mode, hiding the object action bar.
-        // Re-select normally after the move so Delete / Rotate / Duplicate stay available.
         if(moved && d.it) this.app.select({type:'item',id:d.it.id,floor:d.floor});
         this.app.live();
       }
+      // Restore the item's editing controls after every touch, even if the
+      // finger drifted slightly or another active tool handled the tap.
+      if(pressed) this.app.select(pressed);
     };
-    cv.addEventListener('pointerup',up); cv.addEventListener('pointercancel',()=>{this._downPos=null; this._drag3d=null;});
+    cv.addEventListener('pointerup',up);
+    cv.addEventListener('pointercancel',e=>up(e));
     window.addEventListener('keydown',e=>{
       if(this.mode!=='walk') return;
       this.walk.keys.add(e.key.toLowerCase());
