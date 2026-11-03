@@ -5,7 +5,8 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
   'Content-Type': 'application/json',
 };
-const allowedModels = new Set(['deepseek/deepseek-v4.1-flash','z-ai/glm-5.3-flash','qwen/qwen3.8-flash']);
+const DEFAULT_MODEL='deepseek/deepseek-v4.1-flash';
+const validModel=(v:unknown)=>typeof v==='string'&&/^[a-zA-Z0-9._-]+\/[a-zA-Z0-9._:-]+$/.test(v)&&v.length<160;
 function reply(status: number, body: Record<string, unknown>) { return new Response(JSON.stringify(body), { status, headers: corsHeaders }); }
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
@@ -25,8 +26,17 @@ Deno.serve(async (req: Request) => {
   let body:any;
   try{const length=Number(req.headers.get('content-length')||0);if(length>7*1024*1024)return reply(413,{ok:false,error:'Blueprint upload is too large. Please use a smaller image.'});body=await req.json();}
   catch(_){return reply(400,{ok:false,error:'Invalid request body.'});}
-  const model=allowedModels.has(body?.model)?body.model:'deepseek/deepseek-v4.1-flash';
   const action=body?.action||'analyze';
+  if(action==='models'){
+    try{
+      const mr=await fetch('https://openrouter.ai/api/v1/models',{headers:{Authorization:'Bearer '+apiKey}});
+      const md=await mr.json().catch(()=>({}));
+      if(!mr.ok)return reply(502,{ok:false,error:'Could not retrieve OpenRouter model list.'});
+      const models=(md.data||[]).filter((m:any)=>Number(m?.pricing?.prompt)===0&&Number(m?.pricing?.completion)===0).map((m:any)=>({id:m.id,name:m.name||m.id,context_length:m.context_length||0})).sort((a:any,b:any)=>a.name.localeCompare(b.name));
+      return reply(200,{ok:true,models});
+    }catch(_){return reply(502,{ok:false,error:'Could not load free OpenRouter models. Please retry.'});}
+  }
+  const model=validModel(body?.model)?body.model:DEFAULT_MODEL;
   const prompt=action==='test'?'Reply with exactly this text and nothing else: OPENROUTER_CONNECTED':String(body?.prompt||'');
   if(!prompt||prompt.length>24000)return reply(400,{ok:false,error:'The AI prompt is missing or too long.'});
   const content:any[]=[{type:'text',text:prompt}];
