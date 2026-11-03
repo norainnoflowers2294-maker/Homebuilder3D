@@ -19,9 +19,22 @@ export class View3D {
   }
 
   async init(onProg){
-    const THREE = await import('https://esm.sh/three@0.160.0');
+    let THREE;
+    try {
+      THREE = await import('three');
+    } catch(e) {
+      THREE = await import('https://esm.sh/three@0.160.0');
+    }
     this.THREE=THREE;
-    const { OrbitControls } = await import('https://esm.sh/three@0.160.0/examples/jsm/controls/OrbitControls.js');
+
+    let OrbitControls;
+    try {
+      const mod = await import('three/examples/jsm/controls/OrbitControls.js');
+      OrbitControls = mod.OrbitControls;
+    } catch(e) {
+      const mod = await import('https://esm.sh/three@0.160.0/examples/jsm/controls/OrbitControls.js');
+      OrbitControls = mod.OrbitControls;
+    }
     this.OrbitControls=OrbitControls;
     onProg?.('building physical renderer');
 
@@ -45,7 +58,14 @@ export class View3D {
 
     // HDR Environment generation for realistic reflections
     try{
-      const { RoomEnvironment }=await import('https://esm.sh/three@0.160.0/examples/jsm/environments/RoomEnvironment.js');
+      let RoomEnvironment;
+      try {
+        const envMod = await import('three/examples/jsm/environments/RoomEnvironment.js');
+        RoomEnvironment = envMod.RoomEnvironment;
+      } catch(e) {
+        const envMod = await import('https://esm.sh/three@0.160.0/examples/jsm/environments/RoomEnvironment.js');
+        RoomEnvironment = envMod.RoomEnvironment;
+      }
       const pmrem=new THREE.PMREMGenerator(renderer);
       pmrem.compileEquirectangularShader();
       const envTex=pmrem.fromScene(new RoomEnvironment(renderer), 0.04).texture;
@@ -121,16 +141,21 @@ export class View3D {
     const grid=new THREE.GridHelper(60,60,0x2b466d,0x17253d);
     grid.position.y=0.02; grid.material.transparent=true; grid.material.opacity=0.35; scene.add(grid);
 
-    // Controls
+    // Controls - Free Camera Movement
     const ctl=new OrbitControls(camera, this.cv);
-    ctl.target.set(0,1,0); ctl.enableDamping=true; ctl.dampingFactor=0.06;
-    ctl.maxPolarAngle=Math.PI*0.49; ctl.minDistance=1.2; ctl.maxDistance=85;
+    ctl.target.set(0,1,0); ctl.enableDamping=true; ctl.dampingFactor=0.05;
+    ctl.screenSpacePanning=true; // Allow free 3D panning with right click or two fingers
+    ctl.maxPolarAngle=Math.PI*0.96; // Full vertical freedom
+    ctl.minPolarAngle=0.04;
+    ctl.minDistance=0.2; // Fly right inside rooms
+    ctl.maxDistance=250;
     this.controls=ctl;
 
     this.resize(); new ResizeObserver(()=>this.resize()).observe(this.cv.parentElement);
     this.bindInput();
     this.ready=true;
     this.preset='orbit';
+    this.solidGhost=true; // Walls are always solid colored, not transparent
     this.loop();
     this.applyGraphics();
     this.rebuild();
@@ -169,7 +194,10 @@ export class View3D {
       const wantShadows=!!s.shadows&&q.shadow>0;
       this.shadows=wantShadows;
       this.renderer.shadowMap.enabled=wantShadows;
+      this.renderer.shadowMap.type=this.THREE.PCFSoftShadowMap;
       this.sun.castShadow=wantShadows;
+      this.sun.shadow.radius=2.5; // Soften directional sunlight shadow map blur radius (eliminates pixelated edges)
+      this.sun.shadow.bias=-0.0002;
       const sz=Math.max(q.shadow||1024, 1536);
       if(this.sun.shadow.mapSize.x!==sz){
         this.sun.shadow.mapSize.set(sz,sz);
@@ -183,7 +211,13 @@ export class View3D {
       this.sun.position.set(...L.pos);
 
       this.hemi.color.set(L.sky); this.hemi.groundColor.set(L.gnd); this.hemi.intensity=L.hemiI*(0.75+bright*0.35);
-      this.amb.intensity=0.12+0.1*bright;
+      if(L.ambientHue){
+        this.amb.color.set(L.ambientHue);
+        this.amb.intensity=0.18+0.12*bright;
+      } else {
+        this.amb.color.set(0xffffff);
+        this.amb.intensity=0.12+0.1*bright;
+      }
       this.scene.background=new this.THREE.Color(L.bg);
       this.scene.fog=new this.THREE.Fog(L.skyBot??L.bg, L.fog[0], L.fog[1]);
       if(this.skyMat){ this.skyMat.uniforms.top.value.set(L.skyTop??L.bg); this.skyMat.uniforms.bot.value.set(L.skyBot??L.bg); }
@@ -191,11 +225,26 @@ export class View3D {
       if(this.sky&&this.controls){ const t=this.controls.target; this.sky.position.set(t.x,0,t.z); }
       this.renderer.toneMappingExposure=L.exp*(0.8+bright*0.28);
 
-      for(const pl of this.interior){ pl.intensity=L.int*26*bright; pl.color.set(warm>0.4?0xffca8d:0xfff5e6); }
+      for(const pl of this.interior){
+        pl.intensity=L.int*32*bright;
+        pl.color.set(L.amberGlow?0xffb355:(warm>0.4?0xffca8d:0xfff5e6));
+      }
       if(this.gnd){ this.gnd.material.color.set(L.bg===0x0b1220?0x243326:0x8fa57a); }
       this.scene.traverse(o=>{ if(o.isMesh&&o.material&&'envMapIntensity' in o.material&&!o.userData.keepEnv){ o.material.envMapIntensity=this.envI*(o.userData.envMul||1); } });
       this.resize();
     }).catch(()=>{});
+  }
+
+  smoothFlyTo(pos, tgt, dur=750){
+    if(!this.ready) return;
+    this._camTween = {
+      fromPos: this.camera.position.clone(),
+      toPos: pos,
+      fromTgt: this.controls.target.clone(),
+      toTgt: tgt,
+      t0: performance.now(),
+      dur
+    };
   }
 
   setPreset(name){
@@ -207,10 +256,12 @@ export class View3D {
     if(name==='walk'){ this.setMode('walk'); }
     else{
       this.mode='orbit'; if(this.ready) this.controls.enabled=true;
-      if(name==='top'){ this.camera.position.set(cx,y+22,cz+0.01); this.controls.target.set(cx,y,cz); }
-      else if(name==='dollhouse'){ this.camera.position.set(cx+W*0.9,y+W*0.9,cz+D*1.1); this.controls.target.set(cx,y+1,cz); }
-      else if(name==='exterior'){ const R=Math.max(W,D)*1.5+6; this.camera.position.set(cx+R*0.8,y+6,cz+R*0.9); this.controls.target.set(cx,y+1.5,cz); }
-      else { this.camera.position.set(cx+9,y+8,cz+11); this.controls.target.set(cx,y+1,cz); }
+      let targetPos, targetLook;
+      if(name==='top'){ targetPos=new this.THREE.Vector3(cx,y+22,cz+0.01); targetLook=new this.THREE.Vector3(cx,y,cz); }
+      else if(name==='dollhouse'){ targetPos=new this.THREE.Vector3(cx+W*0.9,y+W*0.9,cz+D*1.1); targetLook=new this.THREE.Vector3(cx,y+1,cz); }
+      else if(name==='exterior'){ const R=Math.max(W,D)*1.5+6; targetPos=new this.THREE.Vector3(cx+R*0.8,y+6,cz+R*0.9); targetLook=new this.THREE.Vector3(cx,y+1.5,cz); }
+      else { targetPos=new this.THREE.Vector3(cx+9,y+8,cz+11); targetLook=new this.THREE.Vector3(cx,y+1,cz); }
+      this.smoothFlyTo(targetPos, targetLook, 800);
     }
     this.applyVisibility();
     if(this.ready) this.controls.update();
@@ -220,7 +271,7 @@ export class View3D {
     const hide=this.preset==='top'||this.preset==='dollhouse';
     for(const m of (this.ceilMeshes||[])) m.visible=!hide;
     for(const m of (this.roofMeshes||[])) m.visible=!hide;
-    const wantSolid=this.preset==='exterior'||this.preset==='dollhouse';
+    const wantSolid=true; // Walls are always solid colored, not transparent
     if(wantSolid!==this.solidGhost){ this.solidGhost=wantSolid; this.rebuild(); }
   }
 
@@ -276,6 +327,43 @@ export class View3D {
       this.walk.keys.add(e.key.toLowerCase());
     });
     window.addEventListener('keyup',e=>{ this.walk.keys.delete(e.key.toLowerCase()); });
+    this.bindDropEvents();
+  }
+
+  bindDropEvents(){
+    const cv = this.cv;
+    cv.addEventListener('dragover', e => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'copy';
+      cv.style.cursor = 'copy';
+    });
+    cv.addEventListener('dragleave', e => {
+      cv.style.cursor = '';
+    });
+    cv.addEventListener('drop', e => {
+      e.preventDefault();
+      cv.style.cursor = '';
+      try {
+        const raw = e.dataTransfer.getData('application/json');
+        if (!raw) return;
+        const data = JSON.parse(raw);
+        if (data.type !== 'texture' && data.type !== 'color') return;
+        const { hits } = this.raycastAt(e.clientX, e.clientY);
+        for (const h of hits) {
+          const s = this.selOf(h.object);
+          if (s) {
+            this.app.applyTextureToTarget(s.sel, data);
+            return;
+          }
+        }
+        const fl = this.app.curFloor();
+        if (fl) {
+          this.app.applyTextureToTarget({ type: 'slab', floor: this.app.state.activeFloor, id: fl.id }, data);
+        }
+      } catch (err) {
+        console.warn('Drop error', err);
+      }
+    });
   }
 
   raycastAt(px,py){
@@ -376,6 +464,16 @@ export class View3D {
 
   tap(px,py){
     if(!this.ready) return;
+    if(this.app.activeTexture){
+      const {hits}=this.raycastAt(px,py);
+      for(const h of hits){
+        const f=this.selOf(h.object);
+        if(f){
+          this.app.applyTextureToTarget(f.sel, this.app.activeTexture);
+          return;
+        }
+      }
+    }
     if(this.app.pendingDef||this.app.tool==='zone'||this.app.tool==='patio'||this.app.tool==='pool'||this.app.tool==='paint'){
       this.app.placeAt3D(px,py);
       return;
@@ -649,7 +747,14 @@ export class View3D {
       }
 
       if(!isActive && !this.solidGhost){
-        g.traverse(o=>{ if(o.isMesh&&o.material&&!o.material.transparent){ o.material=o.material.clone(); o.material.transparent=true; o.material.opacity=0.76; } });
+        g.traverse(o=>{
+          // Never make walls transparent - walls must always stay solid
+          if(o.isMesh && o.material && !o.material.transparent && o.userData?.sel?.type !== 'wall'){
+            o.material=o.material.clone();
+            o.material.transparent=true;
+            o.material.opacity=0.76;
+          }
+        });
       }
       this.scene.add(g); this.groups[fi]=g;
     }
@@ -886,7 +991,11 @@ export class View3D {
     const ang=-Math.atan2(dz,dx);
     const finMat=(f,fb)=>{
       const F=(f&&f.tex&&FINISH_MAP[f.tex])||null;
-      return H.tmat((f&&f.color)||(F&&F.base)||fb||w.color||'#e8e4da', (F&&F.tex)||'wallpaint', Math.max(2,Math.round(L/1.5)), 1, 0.92);
+      const mm = H.tmat((f&&f.color)||(F&&F.base)||fb||w.color||'#e8e4da', (F&&F.tex)||'wallpaint', Math.max(2,Math.round(L/1.5)), 1, 0.92);
+      mm.transparent = false;
+      mm.opacity = 1.0;
+      mm.depthWrite = true;
+      return mm;
     };
     const wallMat=finMat(w.finish);
     const split=w.split&&w.split.h>0.15&&w.split.h<(h-0.15)?w.split:null;
@@ -902,6 +1011,7 @@ export class View3D {
       m.position.set(px, baseY+yC, pz);
       m.rotation.y=ang;
       m.castShadow=this.shadows; m.receiveShadow=true;
+      if(m.material){ m.material.transparent=false; m.material.opacity=1.0; m.material.depthWrite=true; }
       m.userData.sel={type:'wall',floor:floorIdx,id:w.id};
       g.add(m); this.wallMeshes.push(m);
       return m;
@@ -1079,6 +1189,14 @@ export class View3D {
         const el=document.querySelector('#fpsChip'); if(el) el.textContent=this.fps+' fps';
         try{ this.autoTick(); }catch(e){}
       }
+      if(this._camTween){
+        const el=performance.now()-this._camTween.t0;
+        const p=Math.min(1, el/this._camTween.dur);
+        const ease=p<0.5 ? 4*p*p*p : 1-Math.pow(-2*p+2, 3)/2;
+        this.camera.position.lerpVectors(this._camTween.fromPos, this._camTween.toPos, ease);
+        this.controls.target.lerpVectors(this._camTween.fromTgt, this._camTween.toTgt, ease);
+        if(p>=1) this._camTween=null;
+      }
       if(this.mode==='orbit'){ this.controls.update(); }
       else { this.stepWalk(dt); }
 
@@ -1152,14 +1270,18 @@ export class View3D {
     const rx=Math.cos(yaw), rz=-Math.sin(yaw);
     this.camera.position.x+=(fx*f+rx*r)*s;
     this.camera.position.z+=(fz*f+rz*r)*s;
+    if(k.has('e')||k.has(' ')) this.camera.position.y += s * 1.5;
+    if(k.has('q')||k.has('c')) this.camera.position.y = Math.max(0.3, this.camera.position.y - s * 1.5);
 
     const st=this.app.state; if(st){
       const fl=st.floors[st.activeFloor]; const sl=fl.slab||{w:12,d:10,cx:0,cz:0};
-      const m=14;
+      const m=35;
       this.camera.position.x=Math.max((sl.cx||0)-m,Math.min((sl.cx||0)+m,this.camera.position.x));
       this.camera.position.z=Math.max((sl.cz||0)-m,Math.min((sl.cz||0)+m,this.camera.position.z));
-      const gy=floorTopY(st,st.activeFloor)+this.walk.eye;
-      this.camera.position.y+= (gy-this.camera.position.y)*Math.min(1,dt*6);
+      if(!k.has('e') && !k.has(' ') && !k.has('q') && !k.has('c')){
+        const gy=floorTopY(st,st.activeFloor)+this.walk.eye;
+        this.camera.position.y+= (gy-this.camera.position.y)*Math.min(1,dt*6);
+      }
     }
     this.applyWalkCam();
   }

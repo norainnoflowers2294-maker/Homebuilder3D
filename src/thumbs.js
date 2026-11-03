@@ -1,6 +1,6 @@
 // Procedural 3D thumbnails for catalog cards: renders each def's mesh offscreen
 // with neutral studio lighting. Lazy + cached; falls back to a line icon.
-import * as THREE from 'https://esm.sh/three@0.160.0';
+import * as THREE from 'three';
 
 let renderer = null, scene = null, camera = null, keyL = null, fillL = null, hemi = null;
 const cache = new Map();   // defId -> dataURL (null = failed, use icon)

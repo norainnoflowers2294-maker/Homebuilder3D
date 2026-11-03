@@ -2,6 +2,7 @@
 // Setup: user pastes their own OAuth client ID (one-time, stored locally).
 // Uses GIS token client + Drive v3 REST (resumable uploads, any size).
 import { saveState, saveCustom, listProjectsMeta, normalizeState } from './store.js';
+import { googleAuth } from './google_auth.js';
 
 const LS_ID = 'hc.drive.clientId';
 const FOLDER = 'HomeCraft 3D';
@@ -14,10 +15,26 @@ export function initDrive(app, toast) {
   const filesEl = $('#driveFiles'), idInput = $('#driveIdInput');
   if (!statusEl || !connBtn) return;
   const S = {
-    clientId: null, token: null, tokenExp: 0, email: '', folderId: null, busy: false, setupWanted: false,
+    clientId: googleAuth.clientId || null, token: googleAuth.getToken() || null, tokenExp: googleAuth.tokenExpiry || 0, email: googleAuth.getUser()?.email || '', folderId: null, busy: false, setupWanted: false,
   };
-  try { S.clientId = localStorage.getItem(LS_ID) || null; } catch (e) {}
+  try { if (!S.clientId) S.clientId = localStorage.getItem(LS_ID) || null; } catch (e) {}
   if (idInput && S.clientId) idInput.value = S.clientId;
+  
+  // Listen for Google Auth changes
+  googleAuth.onAuth(user => {
+    if (user && googleAuth.getToken()) {
+      S.token = googleAuth.getToken();
+      S.tokenExp = googleAuth.tokenExpiry;
+      S.email = user.email || '';
+      S.clientId = googleAuth.clientId;
+      render();
+      refreshList().catch(() => {});
+    } else if (!user) {
+      S.token = null;
+      S.email = '';
+      render();
+    }
+  });
   const originEl = $('#driveOrigin');
   if (originEl) originEl.textContent = location.origin;
   const copyBtn = $('#driveCopyOrigin');
@@ -69,50 +86,45 @@ export function initDrive(app, toast) {
   }
   const q = s => encodeURIComponent(s);
 
-  function connect() {
+  async function connect() {
     if (S.busy) return;
     S.notice = null;
-    if (!S.clientId) {
-      S.setupWanted = true; render();
-      if (idInput) idInput.focus();
-      statusEl.textContent = 'Paste your Google client ID below first (one-time setup).';
-      return;
-    }
-    if (!gis()) { statusEl.textContent = 'Google sign-in failed to load — check connection/ad-blocker, then retry.'; toast('Google script blocked'); return; }
-    busy(true, 'Opening Google sign-in…');
+    busy(true, 'Connecting to Google Drive…');
     try {
-      const tc = gis().initTokenClient({
-        client_id: S.clientId, scope: SCOPE, prompt: '',
-        callback: async resp => {
-          busy(false);
-          if (!resp || resp.error || !resp.access_token) {
-            S.notice = 'Sign-in cancelled or blocked' + (resp && resp.error ? ' (' + resp.error + ')' : '') + '.';
-            render(); return;
-          }
-          S.token = resp.access_token;
-          S.tokenExp = Date.now() + ((+resp.expires_in || 3600) * 1000);
-          try {
-            const about = await api('/drive/v3/about?fields=user');
-            S.email = (about && about.user && about.user.emailAddress) || '';
-          } catch (e) { S.email = ''; }
-          render();
-          toast(S.email ? 'Drive connected' : 'Drive connected');
-          refreshList().catch(() => {});
-        },
-        error_callback: err => {
-          busy(false);
-          const msg = String((err && (err.message || err.type)) || err || '');
-          if (/origin|redirect|client/i.test(msg)) {
-            S.notice = 'Origin not allowed — add ' + location.origin + ' to the client ID’s Authorized JavaScript origins (edit the ID below).';
-            S.setupWanted = true;
-          } else S.notice = 'Sign-in failed: ' + (msg || 'unknown error');
-          render();
-        },
-      });
-      tc.requestAccessToken();
+      const user = await googleAuth.signIn();
+      S.token = googleAuth.getToken();
+      S.tokenExp = googleAuth.tokenExpiry;
+      S.email = user.email || '';
+      S.clientId = googleAuth.clientId;
+      busy(false);
+      render();
+      toast(S.email ? 'Connected to Google Drive as ' + S.email : 'Google Drive connected');
+      refreshList().catch(() => {});
     } catch (err) {
       busy(false);
-      S.notice = 'Sign-in failed: ' + String((err && err.message) || err);
+      if (gis() && S.clientId) {
+        try {
+          const tc = gis().initTokenClient({
+            client_id: S.clientId, scope: SCOPE, prompt: '',
+            callback: async resp => {
+              if (resp?.access_token) {
+                S.token = resp.access_token;
+                S.tokenExp = Date.now() + ((+resp.expires_in || 3600) * 1000);
+                try {
+                  const about = await api('/drive/v3/about?fields=user');
+                  S.email = (about && about.user && about.user.emailAddress) || '';
+                } catch(e) {}
+                render();
+                toast('Google Drive connected');
+                refreshList().catch(() => {});
+              }
+            }
+          });
+          tc.requestAccessToken();
+          return;
+        } catch(e) {}
+      }
+      S.notice = 'Sign-in cancelled or failed: ' + String(err.message || err);
       render();
     }
   }

@@ -228,7 +228,16 @@ export class View2D {
         this.handleDrag(e,dx,dy);
       } else {
         const w=this.s2w(e.clientX,e.clientY);
-        this.preview=w; if(this.draft.length||this.roomDraft.length||this.meas.length) this.request();
+        this.preview=w;
+        if(this.draft.length){
+          const p0=this.draft[this.draft.length-1];
+          const cur={x:this.snap(w.x), z:this.snap(w.z)};
+          const fl=this.app.state.floors[this.app.state.activeFloor];
+          this.checkSnapGuide(cur, p0, fl?.walls);
+        } else {
+          this.activeSnapGuide=null;
+        }
+        if(this.draft.length||this.roomDraft.length||this.meas.length) this.request();
       }
     });
 
@@ -242,11 +251,56 @@ export class View2D {
       if(this.pointers.size===0){
         if(this.moved&&this._drag&&(this._drag.kind==='item'||this._drag.kind==='wallmove'||this._drag.kind==='endpoint'||this._drag.kind==='zonemove'||this._drag.kind==='poolmove')) this.app.showCtxBar();
         if(this._drag&&this._drag.kind==='rect') this.app.finishRectTool(this._drag);
-        this.downPos=null; this._drag=null;
+        this.downPos=null; this._drag=null; this.activeSnapGuide=null;
       }
     };
     cv.addEventListener('pointerup',up); cv.addEventListener('pointercancel',up);
     cv.addEventListener('wheel',e=>{ e.preventDefault(); const f=e.deltaY<0?1.12:0.89; this.zoomAt(e.clientX,e.clientY,f); },{passive:false});
+  }
+
+  checkSnapGuide(cur, anchor, walls, excludeWallId = null) {
+    let guide = null;
+    const thresh = 0.09;
+
+    // 1. Check exact 90-degree orthogonal snap to anchor point (horizontal or vertical)
+    if (anchor) {
+      if (Math.abs(cur.x - anchor.x) < thresh) {
+        guide = { axis: 'x', val: anchor.x, pt: cur, reason: '90°' };
+      } else if (Math.abs(cur.z - anchor.z) < thresh) {
+        guide = { axis: 'z', val: anchor.z, pt: cur, reason: '90°' };
+      }
+    }
+
+    // 2. Check alignment with adjacent room corners
+    if (!guide && walls) {
+      for (const w of walls) {
+        if (excludeWallId && w.id === excludeWallId) continue;
+        for (const pt of [{x: w.x1, z: w.z1}, {x: w.x2, z: w.z2}]) {
+          if (Math.abs(cur.x - pt.x) < thresh) {
+            guide = { axis: 'x', val: pt.x, pt: cur, reason: 'corner', corner: pt };
+            break;
+          } else if (Math.abs(cur.z - pt.z) < thresh) {
+            guide = { axis: 'z', val: pt.z, pt: cur, reason: 'corner', corner: pt };
+            break;
+          }
+        }
+        if (guide) break;
+      }
+    }
+
+    if (guide) {
+      const snapKey = guide.axis + '_' + guide.val.toFixed(2);
+      if (this._lastSnapKey !== snapKey) {
+        this._lastSnapKey = snapKey;
+        this._snapPulseTime = performance.now();
+        import('./sound.js').then(m => m.sound.playGoldenSnap()).catch(() => {});
+      }
+      this.activeSnapGuide = guide;
+    } else {
+      this._lastSnapKey = null;
+      this.activeSnapGuide = null;
+    }
+    return guide;
   }
 
   zoomAt(cx,cy,f){
@@ -413,6 +467,7 @@ export class View2D {
         const nx=this.snap(p.x), nz=this.snap(p.z);
         const ox=d.end===1?w.x2:w.x1, oz=d.end===1?w.z2:w.z1;
         if(Math.hypot(nx-ox,nz-oz)<0.2) return;
+        this.checkSnapGuide({x:nx,z:nz}, {x:ox,z:oz}, fl.walls, w.id);
         if(d.end===1){ w.x1=nx; w.z1=nz; } else { w.x2=nx; w.z2=nz; }
         this.app.afterGeometryChange(true); this.request(); this.app.updateCtxLabel?.(Math.hypot(w.x2-w.x1,w.z2-w.z1).toFixed(2)+'m'); return;
       }
@@ -778,6 +833,42 @@ export class View2D {
       ctx.strokeRect(ax,ay,bx-ax,by-ay); ctx.setLineDash([]);
       ctx.font='700 12px system-ui'; ctx.fillStyle='#7a5f14'; ctx.textAlign='center';
       ctx.fillText(Math.abs(d.x1-d.x0).toFixed(1)+' × '+Math.abs(d.z1-d.z0).toFixed(1)+' m',(ax+bx)/2,(ay+by)/2);
+    }
+
+    if(this.activeSnapGuide){
+      const g = this.activeSnapGuide;
+      const pulseAge = performance.now() - (this._snapPulseTime || 0);
+      const isPulse = pulseAge <= 40;
+      if (isPulse) setTimeout(() => this.request(), 45);
+
+      ctx.save();
+      // Laser guideline
+      ctx.strokeStyle = isPulse ? 'rgba(233, 199, 102, 0.95)' : 'rgba(185, 138, 46, 0.55)';
+      ctx.lineWidth = isPulse ? 2.2 : 1.2;
+      ctx.setLineDash([5, 4]);
+      ctx.beginPath();
+      if(g.axis === 'x'){
+        const [sx] = this.w2s(g.val, 0);
+        ctx.moveTo(sx, 0); ctx.lineTo(sx, rh);
+      } else {
+        const [, sy] = this.w2s(0, g.val);
+        ctx.moveTo(0, sy); ctx.lineTo(rw, sy);
+      }
+      ctx.stroke();
+
+      // Golden target pulse point
+      const pt = g.pt || (this.preview ? {x: this.snap(this.preview.x), z: this.snap(this.preview.z)} : null);
+      if(pt){
+        const [px, py] = this.w2s(pt.x, pt.z);
+        ctx.setLineDash([]);
+        ctx.fillStyle = isPulse ? 'rgba(233, 199, 102, 0.8)' : 'rgba(185, 138, 46, 0.3)';
+        ctx.strokeStyle = isPulse ? '#f5d57f' : '#b98a2e';
+        ctx.lineWidth = isPulse ? 2.5 : 1.5;
+        ctx.beginPath();
+        ctx.arc(px, py, isPulse ? 9 : 5.5, 0, Math.PI * 2);
+        ctx.fill(); ctx.stroke();
+      }
+      ctx.restore();
     }
 
     ctx.restore();

@@ -3,13 +3,24 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
-<title>HomeCraft 3D</title>
+<title>Home Design 3D</title>
 <meta name="description" content="Luxury architectural design studio and 3D home builder with 2D plan and 3D walk modes, infinite floors, procedural textures, and AI tools.">
-<meta property="og:title" content="HomeCraft 3D">
+<meta property="og:title" content="Home Design 3D">
 <meta property="og:description" content="Luxury architectural design studio and 3D home builder with 2D plan and 3D walk modes, infinite floors, procedural textures, and AI tools.">
+<!-- Fast Local Three.js Import Map -->
+<script type="importmap">
+{
+  "imports": {
+    "three": "/node_modules/three/build/three.module.js",
+    "three/": "/node_modules/three/",
+    "three/addons/": "/node_modules/three/examples/jsm/",
+    "three/examples/jsm/": "/node_modules/three/examples/jsm/"
+  }
+}
+</script>
+<link rel="modulepreload" href="/node_modules/three/build/three.module.js">
 <!-- Official Google Identity & API Scripts -->
 <script src="https://accounts.google.com/gsi/client" async defer></script>
-<!-- HomeCraft 3D — original: home-builder-3d -->
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
   :root{
@@ -35,7 +46,8 @@
   /* Top bar */
   #topBar{
     padding-top:var(--sat);
-    background:#fffdf7;
+    background:rgba(255, 253, 247, 0.94);
+    backdrop-filter:blur(18px); -webkit-backdrop-filter:blur(18px);
     border-bottom:1px solid var(--line2);
     box-shadow:0 1px 0 rgba(185,138,46,.25);
     display:flex; align-items:center; gap:4px;
@@ -86,7 +98,7 @@
   #stickKnob{position:absolute; left:50%; top:50%; width:40px; height:40px; margin:-20px 0 0 -20px; border-radius:50%; background:rgba(23,20,16,.75);}
 
   /* Drawers and Catalog Grid */
-  .drawer{position:absolute; top:0; bottom:0; width:min(330px,90vw); z-index:24; background:linear-gradient(180deg,#fffdf8 0%,#faf4e6 100%); display:flex; flex-direction:column; transition:transform .24s ease;}
+  .drawer{position:absolute; top:0; bottom:0; width:min(330px,90vw); z-index:24; background:rgba(255, 253, 247, 0.94); backdrop-filter:blur(18px); -webkit-backdrop-filter:blur(18px); display:flex; flex-direction:column; transition:transform .38s cubic-bezier(0.16, 1, 0.3, 1), box-shadow .38s ease;}
   .drawer.left{left:0; border-right:1px solid var(--line2); transform:translateX(-103%); box-shadow:12px 0 35px rgba(96,74,24,.18);}
   .drawer.right{right:0; border-left:1px solid var(--line2); transform:translateX(103%); box-shadow:-12px 0 35px rgba(96,74,24,.18);}
   .drawer.on{transform:none;}
@@ -137,8 +149,10 @@
   /* ===== ADVANCED MATERIAL & TEXTURE STUDIO PANEL ===== */
   #matStudioPanel{
     position:absolute; left:8px; right:8px; bottom:8px; z-index:28;
-    background:rgba(255,253,247,.98); border:1px solid var(--line2); border-radius:14px;
+    background:rgba(255, 253, 247, 0.94); backdrop-filter:blur(18px); -webkit-backdrop-filter:blur(18px);
+    border:1px solid var(--line2); border-radius:14px;
     padding:12px; display:none; max-height:55vh; overflow-y:auto; box-shadow:0 12px 35px rgba(96,74,24,.25);
+    transition:transform .38s cubic-bezier(0.16, 1, 0.3, 1), opacity .3s ease;
   }
   #matStudioPanel.on{display:flex; flex-direction:column; gap:8px;}
   .matStudioHeader{display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid var(--line2); padding-bottom:6px;}
@@ -167,7 +181,7 @@
   .texCard:active{transform:scale(.95);}
 
   /* Selection Panel & Context Bar */
-  #selPanel{position:absolute; left:8px; right:8px; bottom:8px; z-index:20; background:rgba(255,253,247,.97); border:1px solid var(--line2); border-radius:12px; padding:10px; display:none; max-height:46vh; overflow-y:auto; box-shadow:0 10px 30px rgba(96,74,24,.22);}
+  #selPanel{position:absolute; left:8px; right:8px; bottom:8px; z-index:20; background:rgba(255, 253, 247, 0.94); backdrop-filter:blur(18px); -webkit-backdrop-filter:blur(18px); border:1px solid var(--line2); border-radius:12px; padding:10px; display:none; max-height:46vh; overflow-y:auto; box-shadow:0 10px 30px rgba(96,74,24,.22); transition:transform .38s cubic-bezier(0.16, 1, 0.3, 1), opacity .3s ease;}
   #selPanel.on{display:block;}
   #selPanel h4{margin:0 0 2px; font-size:12px; font-weight:700; display:flex; align-items:center; gap:6px;}
   #selPanel h4 .ic{width:13px; height:13px; color:var(--gold);}
@@ -185,9 +199,9 @@
   label.f textarea, .txtInput{background:#fff; color:var(--txt); border:1px solid var(--line); border-radius:7px; padding:6px 8px; font-size:12px; font-family:inherit;}
 
   /* Modals & Menus */
-  .veil{position:fixed; inset:0; background:rgba(0,0,0,.62); z-index:50; display:none; align-items:flex-end; justify-content:center;}
+  .veil{position:fixed; inset:0; background:rgba(0,0,0,.62); z-index:50; display:none; align-items:flex-end; justify-content:center; backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);}
   .veil.on{display:flex;}
-  .modal{width:min(560px,100%); max-height:88vh; overflow:auto; background:var(--panel); border:1px solid var(--line); border-bottom:0; border-radius:16px 16px 0 0; padding:16px 16px calc(18px + var(--sab));}
+  .modal{width:min(560px,100%); max-height:88vh; overflow:auto; background:rgba(255, 253, 247, 0.94); backdrop-filter:blur(18px); -webkit-backdrop-filter:blur(18px); border:1px solid var(--line); border-bottom:0; border-radius:16px 16px 0 0; padding:16px 16px calc(18px + var(--sab)); transition:transform .38s cubic-bezier(0.16, 1, 0.3, 1), opacity .3s ease;}
   .modal h3{margin:0 0 8px; font-size:14px; font-weight:700; display:flex; align-items:center; gap:7px;}
   .modal h3 .ic{width:14px; height:14px; color:var(--gold);}
   .modal p{font-size:12px; color:var(--mut);}
@@ -207,19 +221,142 @@
     #logo small{display:none;}
     #topBar{flex-wrap:nowrap !important; overflow-x:auto; row-gap:0;}
     #topBar .iconBtn, #topBar .seg, #floorPill, #logo{flex:0 0 auto;}
-    #floorPill{max-width:32vw;}
-    #floorSel{max-width:68px;}
-    .drawer{width:min(320px,92vw);}
+  }
+
+  /* Smooth transitions and animations with Apple-style spring easing */
+  .drawer{transition:transform .38s cubic-bezier(0.16, 1, 0.3, 1), box-shadow .38s ease;}
+  .modal{transition:transform .34s cubic-bezier(0.16, 1, 0.3, 1), opacity .25s ease;}
+  .veil{transition:opacity .25s ease, backdrop-filter .25s ease;}
+  .icard, .texCard, .btn, .fab, .iconBtn{transition:all .22s cubic-bezier(0.16, 1, 0.3, 1);}
+  .icard:hover, .texCard:hover{transform:translateY(-2px); box-shadow:0 6px 16px rgba(96,74,24,0.14); border-color:var(--gold);}
+  
+  #ambienceBtn.on{
+    background:linear-gradient(135deg, #171410, #2c2518) !important;
+    color:var(--gold2) !important;
+    border-color:var(--gold) !important;
+    box-shadow:0 0 10px rgba(233,199,102,0.4);
+  }
+
+  /* Active Texture HUD (Tap-to-Apply Mode) */
+  .activeHUD{
+    position:fixed; bottom:22px; left:50%; transform:translateX(-50%);
+    background:rgba(255, 253, 247, 0.94); backdrop-filter:blur(18px); -webkit-backdrop-filter:blur(18px);
+    border:1.5px solid var(--gold); border-radius:12px;
+    box-shadow:0 10px 32px rgba(26,22,17,0.22);
+    z-index:90; padding:6px 14px; display:flex; align-items:center;
+    transition:all .34s cubic-bezier(0.16,1,0.3,1); animation:slideUp .34s cubic-bezier(0.16,1,0.3,1);
+  }
+  @keyframes slideUp{from{transform:translate(-50%,15px);opacity:0;}to{transform:translate(-50%,0);opacity:1;}}
+  .activeHUD[hidden]{ display:none; }
+  .hudInner{ display:flex; align-items:center; gap:12px; }
+  .hudThumb{ width:38px; height:38px; border-radius:7px; object-fit:cover; border:1px solid var(--line); flex:0 0 auto; box-shadow:0 2px 6px rgba(0,0,0,0.1); }
+  .hudInfo b{ display:block; font-size:12px; color:var(--txt); font-weight:800; }
+  .hudInfo small{ display:block; font-size:10px; color:var(--dim); }
+  .hudScope select{ background:#fff; border:1px solid var(--line); border-radius:6px; padding:4px 8px; font-size:11px; font-weight:700; color:var(--txt); font-family:inherit; }
+
+  /* Save Badge & Google Button */
+  .saveBadge{ display:inline-flex; align-items:center; gap:4px; font-size:10.5px; font-weight:700; color:#2e7d32; background:rgba(46,125,50,0.08); border:1px solid rgba(46,125,50,0.2); border-radius:7px; padding:3px 7px; transition:all .2s ease; white-space:nowrap; }
+  .saveBadge.saving{ color:#b98a2e; background:rgba(185,138,46,0.08); border-color:rgba(185,138,46,0.2); }
+  .googleBtnTop{ display:inline-flex; align-items:center; gap:5px; background:#fff; border:1px solid var(--line2); border-radius:7px; padding:4px 8px; font-size:11px; font-weight:700; color:var(--txt); cursor:pointer; transition:all .18s ease; white-space:nowrap; font-family:inherit; }
+  .googleBtnTop:hover{ background:var(--panel2); box-shadow:0 2px 6px rgba(0,0,0,0.08); }
+  .googleAvatar{ width:16px; height:16px; border-radius:50%; object-fit:cover; }
+
+  /* Persistent On-Screen Undo & Redo (Always on screen, easy to see and use) */
+  #undoBtnTop svg, #undoBtnTop path, #undoBtnTop i,
+  #redoBtnTop svg, #redoBtnTop path, #redoBtnTop i,
+  .floatingUrBtn svg, .floatingUrBtn path, .floatingUrBtn i {
+    pointer-events: none !important;
+  }
+  .urTopBtn {
+    cursor: pointer !important;
+    touch-action: manipulation;
+    user-select: none;
+    -webkit-user-select: none;
+    transition: transform .12s cubic-bezier(0.16, 1, 0.3, 1), opacity .2s ease, background-color .15s ease;
+  }
+  .urTopBtn:active {
+    transform: scale(0.86);
+  }
+  .floatingUndoDock {
+    position: fixed;
+    right: 14px;
+    bottom: calc(var(--sab, 0px) + 20px);
+    z-index: 45;
+    display: flex;
+    align-items: center;
+    background: rgba(255, 253, 247, 0.96);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border: 1.5px solid var(--line2);
+    border-radius: 22px;
+    box-shadow: 0 4px 18px rgba(96, 74, 24, 0.16), 0 1px 4px rgba(0, 0, 0, 0.08);
+    padding: 3px 5px;
+    gap: 3px;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+    transition: transform .18s cubic-bezier(0.16, 1, 0.3, 1), opacity .2s ease, bottom .28s ease;
+  }
+  body.has-sel-panel .floatingUndoDock {
+    bottom: calc(var(--sab, 0px) + 48vh);
+  }
+  .floatingUrBtn {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--txt);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer !important;
+    padding: 0;
+    margin: 0;
+    transition: all .14s cubic-bezier(0.16, 1, 0.3, 1);
+    -webkit-tap-highlight-color: transparent;
+  }
+  .floatingUrBtn:hover {
+    background: rgba(185, 138, 46, 0.14);
+    border-color: rgba(185, 138, 46, 0.35);
+    color: var(--gold);
+  }
+  .floatingUrBtn:active {
+    transform: scale(0.86);
+    background: rgba(23, 20, 16, 0.12);
+  }
+  .floatingUrBtn.disabled {
+    opacity: 0.42;
+  }
+  .floatingUrBtn.active {
+    opacity: 1;
+    color: #1a1611;
+  }
+  .floatingUrSep {
+    width: 1px;
+    height: 18px;
+    background: var(--line2);
+    opacity: 0.65;
   }
 </style>
 
 <div id="app">
   <div id="topBar">
-    <div id="logo"><span class="mark">H3</span><span>HomeCraft&nbsp;3D</span></div>
+    <div id="logo" style="display:flex;align-items:center;gap:8px;cursor:pointer;" title="Home Design 3D">
+      <img src="/public/assets/aistudio/Gemini_Generated_Image_47vapv47vapv47va_41417640.jpg" alt="Home Design 3D Logo" id="appLogoImg" style="height:28px;width:auto;border-radius:6px;object-fit:cover;object-position:center;border:1px solid var(--line2);box-shadow:0 1px 3px rgba(0,0,0,0.08);">
+      <span style="font-weight:800;font-size:12.5px;letter-spacing:-0.01em;white-space:nowrap;color:var(--txt);">Home Design 3D</span>
+    </div>
     <div class="seg" role="tablist" aria-label="mode">
       <button id="mode2dBtn" class="on">2D Plan</button>
       <button id="mode3dBtn">3D</button>
     </div>
+    
+    <!-- One-tap Undo and Redo pinned right near mode toggle -->
+    <div class="seg" id="undoRedoSeg" style="display:flex;gap:2px;flex-shrink:0;">
+      <button class="iconBtn urTopBtn" id="undoBtnTop" title="Undo (tap arrow)"><i data-lucide="undo-2"></i></button>
+      <button class="iconBtn urTopBtn" id="redoBtnTop" title="Redo (tap arrow)"><i data-lucide="redo-2"></i></button>
+    </div>
+
     <div id="floorPill" title="Floors">
       <i data-lucide="building-2"></i>
       <select id="floorSel"></select>
@@ -227,11 +364,24 @@
       <button class="iconBtn" id="floorMenuBtn" title="Floors"><i data-lucide="chevron-down"></i></button>
     </div>
     <button class="iconBtn" id="menuBtn" title="Menu"><i data-lucide="menu"></i></button>
+
+    <!-- Automatic save badge -->
+    <div id="saveBadgeWrap" style="display:flex;align-items:center;">
+      <div class="saveBadge" id="autoSaveIndicator" title="All progress is automatically saved">
+        <i data-lucide="check" style="width:11px;height:11px;"></i><span id="saveStatusTxt">Autosaved</span>
+      </div>
+    </div>
+
     <div class="grow"></div>
-    <button class="iconBtn" id="asBtn" title="Design assistant"><i data-lucide="bot"></i></button>
-    <button class="iconBtn" id="saveBtnTop" title="Save project"><i data-lucide="save"></i></button>
+
+    <!-- Soothing Ambience toggle -->
+    <button class="iconBtn" id="ambienceBtn" title="Soothing Ambience (Summer breeze & warmth)"><i data-lucide="waves"></i></button>
+
+    <!-- Textures & Colors Studio Button -->
+    <button class="iconBtn" id="drawerTexBtn" title="Textures & Colors Studio" style="background:linear-gradient(135deg,#fffdf7,#f5ebce);border-color:var(--gold);"><i data-lucide="palette"></i></button>
     <button class="iconBtn" id="drawerLBtn" title="Build"><i data-lucide="brick-wall"></i></button>
     <button class="iconBtn" id="drawerRBtn" title="Furnish"><i data-lucide="sofa"></i></button>
+    <button class="iconBtn" id="asBtn" title="Design assistant"><i data-lucide="bot"></i></button>
     <button class="iconBtn" id="focusBtn" title="Fullscreen"><i data-lucide="maximize"></i></button>
   </div>
 
@@ -355,9 +505,10 @@
     </div>
 
     <div id="boot">
+      <img src="/public/assets/aistudio/Gemini_Generated_Image_47vapv47vapv47va_41417640.jpg" alt="Home Design 3D Logo" style="height:56px;width:auto;border-radius:10px;margin-bottom:6px;box-shadow:0 3px 12px rgba(0,0,0,0.12);">
       <div class="spin"></div>
-      <div><b>HomeCraft 3D</b></div>
-      <div class="hint" id="bootMsg">Preparing 2D plan + 3D engine (Three.js from CDN).</div>
+      <div><b>Home Design 3D</b></div>
+      <div class="hint" id="bootMsg">Preparing architectural workspace…</div>
     </div>
   <aside id="drawerL" class="drawer left" aria-label="Build catalog">
       <div class="drHead"><span class="mk"><i data-lucide="brick-wall"></i></span><div><b>BUILD</b><span>Tools, walls, textures & outdoor</span></div><div class="grow"></div><button class="iconBtn" id="drawerLClose" title="Close"><i data-lucide="x"></i></button></div>
@@ -382,10 +533,61 @@
       </div>
       <div class="drBody" id="drawerRBody"></div>
     </aside>
-</div>
 
-  
+    <!-- Textures & Finishes Studio Drawer -->
+    <aside id="drawerTex" class="drawer right" aria-label="Texture & Finishes studio">
+      <div class="drHead">
+        <span class="mk" style="background:var(--gold);color:#fff"><i data-lucide="palette"></i></span>
+        <div><b>TEXTURES &amp; FINISHES</b><span>Tap to select or drag to any surface</span></div>
+        <div class="grow"></div>
+        <button class="iconBtn" id="drawerTexClose" title="Close"><i data-lucide="x"></i></button>
+      </div>
+      <div class="drSearch"><input id="drawerTexSearch" placeholder="Search textures, woods, tiles, colors…" autocomplete="off"></div>
+      <div class="drChips" id="texChipsBar">
+        <button class="fchip on" data-texcat="all">All</button>
+        <button class="fchip" data-texcat="wall">Walls</button>
+        <button class="fchip" data-texcat="wallpaper">Wallpapers</button>
+        <button class="fchip" data-texcat="floor">Flooring</button>
+        <button class="fchip" data-texcat="wood">Hardwood</button>
+        <button class="fchip" data-texcat="stone">Tile &amp; Stone</button>
+        <button class="fchip" data-texcat="outdoor">Outdoor</button>
+        <button class="fchip" data-texcat="color">Colors</button>
+      </div>
+      <div class="drBody" id="drawerTexBody" style="overflow-y:auto;flex:1;padding:6px 10px 20px;"></div>
+    </aside>
+
+    <!-- Active Texture Tap-to-Apply HUD Banner -->
+    <div id="activeTexHUD" class="activeHUD" hidden>
+      <div class="hudInner">
+        <img id="activeTexThumb" class="hudThumb" src="" alt="Texture preview">
+        <div class="hudInfo">
+          <b id="activeTexName">Texture Name</b>
+          <small>Tap any wall, floor, or object in 2D or 3D to apply</small>
+        </div>
+        <div class="hudScope">
+          <select id="activeTexScope" title="Scope for walls">
+            <option value="wall">This Wall</option>
+            <option value="room">Entire Room</option>
+            <option value="floor">Whole Floor</option>
+            <option value="house">Entire House</option>
+          </select>
+        </div>
+        <button class="btn small primary" id="activeTexDone">Done</button>
+      </div>
+    </div>
   </div>
+
+  <!-- Persistent On-Screen Undo & Redo Floating Dock (Always on screen, small and out of the way) -->
+  <div id="floatingUndoRedo" class="floatingUndoDock" title="Undo &amp; Redo (Always on screen • Drag to move)">
+    <button class="floatingUrBtn" id="floatingUndoBtn" title="Undo (tap arrow)" aria-label="Undo">
+      <svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-undo-2"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5v0a5.5 5.5 0 0 1-5.5 5.5H11"/></svg>
+    </button>
+    <div class="floatingUrSep"></div>
+    <button class="floatingUrBtn" id="floatingRedoBtn" title="Redo (tap arrow)" aria-label="Redo">
+      <svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-redo-2"><path d="m15 14 5-5-5-5"/><path d="M20 9H9.5A5.5 5.5 0 0 0 4 14.5v0A5.5 5.5 0 0 0 9.5 20H13"/></svg>
+    </button>
+  </div>
+</div>
 
 <!-- Workspace menu with Google Drive Cloud Sync row -->
 <div class="veil" id="menuVeil">
@@ -530,6 +732,31 @@
   <div class="modal">
     <h3><i data-lucide="settings"></i>Settings</h3>
     <p>Advanced build + graphics settings. Changes apply live and autosave.</p>
+    
+    <h3 style="margin-top:12px"><i data-lucide="user-check"></i>Google Account</h3>
+    <div id="settingsGoogleAccountBlock" style="background:var(--panel2);border:1px solid var(--line2);border-radius:10px;padding:10px 12px;margin-bottom:8px;">
+      <div id="settingsGoogleLoggedOut" style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+        <span style="font-size:12px;color:var(--dim);">Not signed in</span>
+        <button class="btn small primary" id="settingsSignInBtn" type="button" style="display:inline-flex;align-items:center;gap:6px;">
+          <svg style="width:13px;height:13px;" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/></svg>
+          <span>Sign in with Google</span>
+        </button>
+      </div>
+      <div id="settingsGoogleLoggedIn" style="display:none;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <img id="settingsUserAvatar" src="" alt="Google User" style="width:28px;height:28px;border-radius:50%;object-fit:cover;border:1px solid var(--line2);">
+          <div>
+            <b id="settingsUserName" style="display:block;font-size:12px;color:var(--txt);">User Name</b>
+            <small id="settingsUserEmail" style="display:block;font-size:10.5px;color:var(--mut);">user@gmail.com</small>
+          </div>
+        </div>
+        <button class="btn small danger" id="settingsSignOutBtn" type="button" style="display:inline-flex;align-items:center;gap:5px;">
+          <i data-lucide="log-out"></i>
+          <span>Log out</span>
+        </button>
+      </div>
+    </div>
+
     <h3 style="margin-top:10px"><i data-lucide="brick-wall"></i>Build defaults</h3>
     <label class="f">Snap <select id="snapSel2"><option value="0.1">10 cm</option><option value="0.25" selected>25 cm</option><option value="0.5">50 cm</option><option value="1">1 m</option><option value="0.05">5 cm</option></select></label>
     <label class="f">Wall height (m) <input type="number" id="wallHInput2" step="0.1" min="2" max="5" value="2.7"></label>
@@ -538,7 +765,7 @@
     <label class="f">Quality <select id="qSel"><option value="performance">Performance</option><option value="balanced" selected>Balanced</option><option value="high">High</option><option value="ultra">Ultra</option></select></label>
     <label class="f">Auto quality <select id="autoQSel"><option value="on">On</option><option value="off">Off</option></select></label>
     <label class="f">Live FPS <span id="fpsNow" class="sub">–</span></label>
-    <label class="f">Lighting <select id="lightSel"><option value="day">Day</option><option value="morning">Morning</option><option value="afternoon">Afternoon</option><option value="sunset">Sunset</option><option value="night">Night</option></select></label>
+    <label class="f">Lighting <select id="lightSel"><option value="golden">Golden Hour</option><option value="day">Day</option><option value="morning">Morning</option><option value="afternoon">Afternoon</option><option value="sunset">Sunset</option><option value="night">Night</option></select></label>
     <label class="f">Brightness <input type="range" id="brightR" min="0.4" max="1.6" step="0.05" value="1"></label>
     <label class="f">Warmth <input type="range" id="warmR" min="0" max="1" step="0.05" value="0.35"></label>
     <label class="f">Shadows <select id="shadSel"><option value="off">Off</option><option value="on">On</option></select></label>
@@ -546,6 +773,28 @@
     <label class="f">Plan overlay <select id="bpVis"><option value="on">Visible</option><option value="off">Hidden</option></select></label>
     <label class="f">Overlay opacity <input type="range" id="bpOp" min="0.1" max="1" step="0.05" value="0.55"></label>
     <div class="rowBtns" style="margin-top:10px"><button class="btn primary" id="closeSettingsBtn">Done</button></div>
+  </div>
+</div>
+
+<!-- Automatic Google Login Welcome Modal -->
+<div class="veil" id="autoLoginVeil" style="display:none;align-items:center;justify-content:center;">
+  <div class="modal" style="border-radius:16px;max-width:420px;text-align:center;padding:26px 20px;">
+    <div style="display:flex;justify-content:center;margin-bottom:12px;">
+      <img src="/public/assets/aistudio/Gemini_Generated_Image_47vapv47vapv47va_41417640.jpg" alt="Home Design 3D Logo" style="height:68px;width:auto;border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,0.12);object-fit:contain;">
+    </div>
+    <h3 style="justify-content:center;font-size:17px;font-weight:800;margin-bottom:6px;">Sign in to Home Design 3D</h3>
+    <p style="font-size:12px;color:var(--dim);line-height:1.5;margin-bottom:18px;">
+      Connect your Google Email account to automatically backup 3D models to Google Drive, autosave your projects, and access your designs on any device.
+    </p>
+    <div style="display:flex;flex-direction:column;gap:9px;">
+      <button class="btn primary" id="autoLoginGoogleBtn" style="padding:10px 16px;font-size:12.5px;font-weight:700;justify-content:center;gap:9px;">
+        <svg style="width:16px;height:16px;" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/></svg>
+        <span>Continue with Google</span>
+      </button>
+      <button class="btn" id="autoLoginGuestBtn" style="padding:8px 14px;font-size:11.5px;justify-content:center;color:var(--mut);border-color:transparent;background:transparent;">
+        Continue as Guest (Offline Mode)
+      </button>
+    </div>
   </div>
 </div>
 

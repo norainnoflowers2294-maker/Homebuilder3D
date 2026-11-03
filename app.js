@@ -3,13 +3,15 @@ import { MaterialStudio } from './material_studio.js';
 import { blankState, demoState, loadState, saveState, loadCustom, saveCustom, uid, floorBaseY, floorTopY, nextFloorRise, defaultFloor, normalizeState, resolveAttachments, roomRectAt, wallsInRect, projectOnWall, wallLen, shelfStackTop, currentProjectState, listProjectsMeta, createProject, renameProject, duplicateProject, deleteProject, loadProjectState, setCurrentPid } from './store.js';
 import { getCatalog, defById, CATEGORIES } from './catalog.js';
 import { requestThumb, thumbCached } from './thumbs.js';
-import { FINISHES, FINISH_MAP, ZONE_MATS, ZONE_MAP, POOL_WATERS, POOL_WATER_MAP } from './mats.js';
+import { FINISHES, FINISH_MAP, ZONE_MATS, ZONE_MAP, POOL_WATERS, POOL_WATER_MAP, getTextureThumb, DESIGNER_COLORS } from './mats.js';
 import { POOL_SHAPES, shelfSlots } from './catalog_extra.js';
 import { View2D } from './view2d.js';
 import { View3D } from './view3d.js';
 import { initDrive } from './drive.js';
 import { initDropbox } from './dropbox.js';
 import { initBackendUI } from './supabase/ui.js';
+import { googleAuth } from './google_auth.js';
+import { sound } from './sound.js';
 
 const $=s=>document.querySelector(s);
 function toast(m,ms=2200){ const t=$('#toast'); t.textContent=m; t.style.display='block'; clearTimeout(t._h); t._h=setTimeout(()=>t.style.display='none',ms); }
@@ -83,21 +85,37 @@ class App {
 
   dirty(save=true){
     this.resolveAll();
-    if(save){ this.pushUndo(); clearTimeout(this._s); this._s=setTimeout(()=>{ saveState(this.state); const el=document.querySelector('#saveState'); if(el) el.textContent='Autosaved '+new Date().toLocaleTimeString(); },400); }    this.view2d?.request();
+    if(save){
+      this.pushUndo();
+      clearTimeout(this._s);
+      this._s=setTimeout(()=>{
+        saveState(this.state);
+        this.updateUndoRedoUI();
+      },300);
+    }
+    this.view2d?.request();
     this.view3d?.rebuild();
   }
   live(){
     this.resolveAll();
-    clearTimeout(this._s); this._s=setTimeout(()=>{ saveState(this.state); },600);
+    clearTimeout(this._s);
+    this._s=setTimeout(()=>{
+      saveState(this.state);
+      this.updateUndoRedoUI();
+    },500);
     this.view2d?.request();
     if(this.view3d?.rebuildSoon) this.view3d.rebuildSoon(); else this.view3d?.rebuild();
   }
-  saveState(){ saveState(this.state); } // persistence hook for modules (e.g. MaterialStudio)
+  saveState(){
+    saveState(this.state);
+    this.updateUndoRedoUI();
+  }
   pushUndo(){
     try{
       this.undoStack.push(JSON.stringify(this.state));
       if(this.undoStack.length>60) this.undoStack.shift();
       this.redoStack.length=0;
+      this.updateUndoRedoUI();
     }catch(e){}
   }
   checkpoint(){ this.pushUndo(); } // snapshot for undo at drag start (autosave happens via live())
@@ -107,13 +125,128 @@ class App {
     this.redoStack.push(JSON.stringify(this.state));
     this.state=normalizeState(JSON.parse(this.undoStack.pop()))||this.state;
     this.sel=null; this.view2d.draft=[];
-    saveState(this.state); this.syncAll(); toast('Undone');
+    saveState(this.state); this.syncAll();
+    this.updateUndoRedoUI();
+    toast('Undone');
   }
   doRedo(){
     if(!this.redoStack.length){ toast('Nothing to redo'); return; }
     this.undoStack.push(JSON.stringify(this.state));
     this.state=normalizeState(JSON.parse(this.redoStack.pop()))||this.state;
     this.sel=null; saveState(this.state); this.syncAll();
+    this.updateUndoRedoUI();
+    toast('Redone');
+  }
+
+  updateUndoRedoUI(){
+    const uBtn = document.getElementById('undoBtnTop');
+    const rBtn = document.getElementById('redoBtnTop');
+    const fuBtn = document.getElementById('floatingUndoBtn');
+    const frBtn = document.getElementById('floatingRedoBtn');
+
+    const hasU = !!(this.undoStack && this.undoStack.length > 0);
+    const hasR = !!(this.redoStack && this.redoStack.length > 0);
+
+    for(const btn of [uBtn, fuBtn]){
+      if(!btn) continue;
+      btn.removeAttribute('disabled');
+      btn.style.pointerEvents = 'auto';
+      btn.classList.toggle('active', hasU);
+      btn.classList.toggle('disabled', !hasU);
+      btn.style.opacity = hasU ? '1' : '0.42';
+      btn.title = hasU ? `Undo (1-tap, ${this.undoStack.length} step${this.undoStack.length>1?'s':''})` : 'Undo (nothing to undo)';
+    }
+
+    for(const btn of [rBtn, frBtn]){
+      if(!btn) continue;
+      btn.removeAttribute('disabled');
+      btn.style.pointerEvents = 'auto';
+      btn.classList.toggle('active', hasR);
+      btn.classList.toggle('disabled', !hasR);
+      btn.style.opacity = hasR ? '1' : '0.42';
+      btn.title = hasR ? `Redo (1-tap, ${this.redoStack.length} step${this.redoStack.length>1?'s':''})` : 'Redo (tap arrow to redo)';
+    }
+
+    const badge = document.getElementById('saveStatusTxt');
+    if(badge){
+      badge.textContent = 'Autosaved';
+    }
+  }
+
+  applyTextureToTarget(sel, data){
+    if(!sel || !data) return;
+    const fl = this.state.floors[sel.floor ?? this.state.activeFloor] || this.curFloor();
+    if(!fl) return;
+
+    if(sel.type === 'wall'){
+      const w = fl.walls.find(v => v.id === sel.id);
+      if(!w) return;
+      if(w.locked){ toast('Wall is locked — unlock to edit'); return; }
+      this.pushUndo();
+      const scope = this._finishScope || 'wall';
+      const walls = this.wallsForScope(fl, w, scope);
+      const isColor = !!data.hex;
+      if(isColor){
+        for(const ww of walls){
+          ww.color = data.hex;
+          if(!ww.finish) ww.finish = { tex: 'wallpaint', color: data.hex };
+          else ww.finish.color = data.hex;
+        }
+      } else {
+        const texKey = data.tex || data.id || 'wallpaint';
+        for(const ww of walls){
+          ww.finish = { tex: texKey, color: data.base || '#ffffff' };
+        }
+      }
+      saveState(this.state);
+      this.syncAll();
+      sound.playStoneTap();
+      toast(`Applied ${data.name} to ${scope === 'wall' ? 'wall' : scope}`);
+    } else if(sel.type === 'slab' || sel.type === 'zone'){
+      this.pushUndo();
+      const texKey = data.tex || data.id;
+      if(data.kind === 'floor' || data.kind === 'patio' || data.kind === 'terrain'){
+        fl.finish = texKey;
+      } else {
+        fl.finish = texKey || 'oak';
+      }
+      saveState(this.state);
+      this.syncAll();
+      sound.playFloorWhoosh();
+      toast(`Applied ${data.name} to floor`);
+    } else if(sel.type === 'item'){
+      const it = fl.items.find(v => v.id === sel.id);
+      if(!it) return;
+      if(it.locked){ toast('Item is locked — unlock to edit'); return; }
+      this.pushUndo();
+      if(!it.matOverrides) it.matOverrides = {};
+      const partKey = '__all__';
+      if(!it.matOverrides[partKey]) it.matOverrides[partKey] = {};
+      if(data.hex){
+        it.matOverrides[partKey].color = data.hex;
+      } else if(data.dataUrl){
+        it.matOverrides[partKey].textureUrl = data.dataUrl;
+      } else if(data.tex){
+        it.matOverrides[partKey].textureUrl = getTextureThumb(data, 256);
+      }
+      saveState(this.state);
+      this.syncAll();
+      sound.playStoneTap();
+      toast(`Applied ${data.name} to ${it.name || 'object'}`);
+    }
+  }
+
+  armTextureForApply(item, thumbUrl){
+    this.activeTexture = item;
+    const hud = document.getElementById('activeTexHUD');
+    if(hud){
+      hud.hidden = false;
+      const th = document.getElementById('activeTexThumb');
+      if(th) th.src = thumbUrl || getTextureThumb(item, 80);
+      const nm = document.getElementById('activeTexName');
+      if(nm) nm.textContent = item.name;
+    }
+    toast(`Active: ${item.name} — Tap any wall, floor, or object to apply`);
   }
 
   curFloor(){ return this.state.floors[this.state.activeFloor]; }
@@ -335,6 +468,7 @@ class App {
       this.select({type:'item',id:it.id,floor:this.state.activeFloor},{quiet:true});
       this.showCtxBar();
       this.view2d.request(); this.view3d.rebuild();
+      sound.playWoodTock();
       toast(`Stairs placed — rise auto-set to ${it.rise.toFixed(2)} m${above?` to reach ${above}`:' (add a floor above to connect it)'}`);
       return;
     }
@@ -342,6 +476,7 @@ class App {
     this.select({type:'item',id:it.id,floor:this.state.activeFloor},{quiet:true});
     this.showCtxBar();
     this.view2d.request(); this.view3d.rebuild();
+    sound.playWoodTock();
     toast(def.name+' placed'+(def.shelfable?' — tap a shelf/bookcase to put it on shelves':' — tap to place more, switch tools to stop'));
   }
   // Re-fit every (unlocked) staircase to the floor above it. Called when floors
@@ -385,6 +520,7 @@ class App {
     this.resolveAll();
     saveState(this.state); this.syncAll();
     this.select({type:'item',id:it.id,floor:fi});
+    sound.playWoodTock();
     toast(def.name+' hung — drag along the wall, Properties for height');
   }
   attachShelf(def,parent,dx,dz,shelfIdx,floorIdx){
@@ -423,6 +559,7 @@ class App {
     this.resolveAll();
     saveState(this.state); this.syncAll();
     this.select({type:'item',id:it.id,floor:fi});
+    sound.playWoodTock();
     toast(def.name+' placed on shelf — drag to rearrange, Properties for shelf and position');
   }
   // ---- pools / paint / rect tools ----
@@ -696,6 +833,7 @@ class App {
     this.pushUndo();
     for(const w of walls) this.applyWallFinish(w,finish,split);
     saveState(this.state); this.syncAll();
+    sound.playStoneTap();
     toast('Finish applied to '+(walls.length>1?walls.length+' walls':'wall'));
   }
   wallsForScope(fl,w,scope){
@@ -911,13 +1049,101 @@ function drawGroupedGrid(defs,cat,emptyText){
 const BUILD_CATS=['structure','flooring','pools','patios','land','outdoor'];
 
 function openDrawer(side,on){
-  const el=side==='L'?document.querySelector('#drawerL'):document.querySelector('#drawerR');
+  const el=side==='L'?document.querySelector('#drawerL'):side==='R'?document.querySelector('#drawerR'):document.querySelector('#drawerTex');
   if(!el) return;
   if(on===undefined||on===null) on=!el.classList.contains('on');
   el.classList.toggle('on',!!on);
-  try{ localStorage.setItem('hc.drawer'+side,on?'1':'0'); }catch(e){}
-  const btn=side==='L'?document.querySelector('#drawerLBtn'):document.querySelector('#drawerRBtn');
+  if(side==='Tex' && on){
+    renderTextureStudioDrawer();
+  }
+  const btn=side==='L'?document.querySelector('#drawerLBtn'):side==='R'?document.querySelector('#drawerRBtn'):document.querySelector('#drawerTexBtn');
   if(btn) btn.classList.toggle('on',!!on);
+  if(on){
+    if(side!=='L') openDrawer('L',false);
+    if(side!=='R') openDrawer('R',false);
+    if(side!=='Tex') openDrawer('Tex',false);
+  }
+}
+
+function renderTextureStudioDrawer(){
+  const body = document.getElementById('drawerTexBody');
+  if (!body) return;
+  body.innerHTML = '';
+
+  const allItems = [
+    ...FINISHES.map(f => ({ ...f, kind: 'finish', type: 'texture', sub: 'Wall finish' })),
+    ...ZONE_MATS.map(m => ({ ...m, kind: m.kind, type: 'texture', sub: m.kind === 'floor' ? 'Flooring' : m.kind === 'patio' ? 'Patio' : 'Outdoor terrain' })),
+    ...DESIGNER_COLORS.map(c => ({ ...c, type: 'color', kind: 'color', sub: 'Designer Paint Color' }))
+  ];
+
+  const search = (document.getElementById('drawerTexSearch')?.value || '').toLowerCase().trim();
+  const activeChip = document.querySelector('#texChipsBar .fchip.on')?.dataset.texcat || 'all';
+
+  const filtered = allItems.filter(item => {
+    if (search) {
+      const matchName = item.name.toLowerCase().includes(search);
+      const matchSub = (item.sub || '').toLowerCase().includes(search);
+      const matchId = (item.id || '').toLowerCase().includes(search);
+      if (!matchName && !matchSub && !matchId) return false;
+    }
+    if (activeChip === 'all') return true;
+    if (activeChip === 'wall') return item.kind === 'finish' && !item.id.startsWith('wp_');
+    if (activeChip === 'wallpaper') return item.id.startsWith('wp_');
+    if (activeChip === 'floor') return item.kind === 'floor';
+    if (activeChip === 'wood') return item.tex?.includes('wood') || item.tex?.includes('oak') || item.tex?.includes('walnut') || item.tex?.includes('herring') || item.tex?.includes('chevron') || item.name.toLowerCase().includes('wood');
+    if (activeChip === 'stone') return item.tex?.includes('tile') || item.tex?.includes('marble') || item.tex?.includes('granite') || item.tex?.includes('stone') || item.name.toLowerCase().includes('tile');
+    if (activeChip === 'outdoor') return item.kind === 'patio' || item.kind === 'terrain';
+    if (activeChip === 'color') return item.type === 'color';
+    return true;
+  });
+
+  const grid = document.createElement('div');
+  grid.className = 'itemGrid';
+
+  filtered.forEach(item => {
+    const card = document.createElement('button');
+    const isArmed = app.activeTexture && (app.activeTexture.id === item.id || app.activeTexture.tex === item.tex);
+    card.className = 'icard' + (isArmed ? ' on' : '');
+    card.draggable = true;
+
+    const thumbUrl = getTextureThumb(item, 100);
+    card.innerHTML = `
+      <span class="im" style="background:#eee;position:relative;overflow:hidden;">
+        <img src="${thumbUrl}" alt="${item.name}" draggable="false" style="width:100%;height:100%;object-fit:cover;display:block;">
+      </span>
+      <span class="dnm">${item.name}</span>
+      <span class="dsz">${item.sub || 'Texture'}</span>
+    `;
+
+    // Drag and drop onto surfaces
+    card.ondragstart = (e) => {
+      card.style.opacity = '0.5';
+      const payload = {
+        type: item.type || 'texture',
+        tex: item.tex || item.id,
+        id: item.id,
+        name: item.name,
+        base: item.base || item.hex,
+        hex: item.hex,
+        kind: item.kind,
+        dataUrl: thumbUrl
+      };
+      e.dataTransfer.setData('application/json', JSON.stringify(payload));
+      e.dataTransfer.effectAllowed = 'copy';
+    };
+    card.ondragend = () => { card.style.opacity = '1'; };
+
+    // Tap-to-apply (arms texture and opens HUD)
+    card.onclick = () => {
+      app.armTextureForApply(item, thumbUrl);
+      document.querySelectorAll('#drawerTexBody .icard.on').forEach(c => c.classList.remove('on'));
+      card.classList.add('on');
+    };
+
+    grid.appendChild(card);
+  });
+
+  body.appendChild(grid);
 }
 
 function customCardDefs(){
@@ -1271,10 +1497,11 @@ app.refreshSelPanel=function(){
       return;
     }
   }
-  if(!s){ p.classList.remove('on'); p.innerHTML=''; return; }
-  if(!app._panelForce){ p.classList.remove('on'); return; } // full editor opens only via Properties
+  if(!s){ p.classList.remove('on'); p.innerHTML=''; document.body.classList.remove('has-sel-panel'); return; }
+  if(!app._panelForce){ p.classList.remove('on'); document.body.classList.remove('has-sel-panel'); return; } // full editor opens only via Properties
   const fl=app.state.floors[s.floor]||app.curFloor();
   p.classList.add('on');
+  document.body.classList.add('has-sel-panel');
   if(s.type==='slab'){
     const sl=fl.slab||{w:12,d:10,cx:0,cz:0};
     p.innerHTML=`<h4>${icon('layers')} Floor slab • ${fl.name}</h4><div class="sub">Plate the house sits on. Finish shows in 3D.</div>
@@ -1283,6 +1510,7 @@ app.refreshSelPanel=function(){
       <label class="f">Center X <input type="number" id="sX" step="0.5" value="${sl.cx||0}"></label>
       <label class="f">Center Z <input type="number" id="sZ" step="0.5" value="${sl.cz||0}"></label>
       <label class="f">Finish <select id="sF"><option value="wood">Wood</option><option value="tile">Tile</option><option value="carpet">Carpet</option><option value="concrete">Concrete</option></select></label>
+      <button class="btn small primary" id="sOpenTexMenu" type="button" style="width:100%;margin:6px 0;display:flex;align-items:center;justify-content:center;gap:6px;"><i data-lucide="palette"></i> All Textures &amp; Colors Menu</button>
       <h4>${icon('house')} Room designs</h4>
       <div class="sub">Save the room at the screen center (furniture + wall finishes), re-apply it anywhere, or reset the room.</div>
       <div class="rowBtns"><input id="rName" placeholder="Design name" style="flex:1;background:#0b111c;color:var(--txt);border:1px solid var(--line);border-radius:9px;padding:7px 9px;font-size:12px"><button class="btn small primary" id="rSave">${icon('save')} Save</button></div>
@@ -1290,6 +1518,7 @@ app.refreshSelPanel=function(){
       <div class="rowBtns"><button class="btn small danger" id="rReset">${icon('rotate-ccw')} Reset this room</button></div>
       <div class="rowBtns"><button class="btn" id="sFit">${icon('frame')} Fit to house</button><button class="btn" id="sXb">Close</button></div>`;
     $('#sF').value=fl.finish||'wood';
+    $('#sOpenTexMenu').onclick=()=>openDrawer('Tex',true);
     $('#sW').onchange=e=>{ sl.w=Math.max(4,+e.target.value||12); saveState(app.state); app.syncAll(); };
     $('#sD').onchange=e=>{ sl.d=Math.max(4,+e.target.value||10); saveState(app.state); app.syncAll(); };
     $('#sX').onchange=e=>{ sl.cx=+e.target.value||0; saveState(app.state); app.syncAll(); };
@@ -1326,6 +1555,7 @@ app.refreshSelPanel=function(){
       <label class="f">Height <input type="range" id="wH" min="2" max="5" step="0.1" value="${w.h||2.7}" ${w.locked?'disabled':''}> <b id="wHv">${(w.h||2.7).toFixed(1)}m</b></label>
       <label class="f">Thick <input type="range" id="wT" min="0.05" max="0.5" step="0.01" value="${w.t||0.15}" ${w.locked?'disabled':''}> <b id="wTv">${(w.t||0.15).toFixed(2)}m</b></label>
       <label class="f">Color <input type="color" id="wC" value="${toColor(w.color)}" ${w.locked?'disabled':''}></label>
+      <button class="btn small primary" id="wOpenTexMenu" type="button" style="width:100%;margin:6px 0;display:flex;align-items:center;justify-content:center;gap:6px;"><i data-lucide="palette"></i> All Textures &amp; Colors Menu</button>
       <h4>${icon('paint-roller')} Finish • ${curTex?swName(FINISHES,curTex):'plain paint'}</h4>
       <div class="sub">Tap a finish — it applies to the scope below. Two-tone splits upper + lower.</div>
       ${swGrid(FINISHES,curTex,'tex')}
@@ -1340,6 +1570,7 @@ app.refreshSelPanel=function(){
       :`<div class="rowBtns"><button class="btn small" id="wSplitOn" ${w.locked?'disabled':''}>Add split</button></div>`}
       <div class="rowBtns"><button class="btn" id="wLock">${w.locked?icon('lock-open')+' Unlock':icon('lock')+' Lock'}</button><button class="btn" id="wCopy">${icon('copy')} Copy style</button><button class="btn" id="wPaste" ${app.styleClip?.kind==='wall'?'':'disabled'}>${icon('paint-roller')} Paste style</button></div>
       <div class="rowBtns"><button class="btn" id="wSplit">${icon('scissors')} Split</button><button class="btn" id="wDup">${icon('copy')} Duplicate</button><button class="btn danger" id="wDel">Delete</button><button class="btn" id="wX">Close</button></div>`;
+    $('#wOpenTexMenu').onclick=()=>openDrawer('Tex',true);
     const scopeWalls=()=>app.wallsForScope(fl,w,app._finishScope);
     p.querySelectorAll('[data-scope]').forEach(b=>b.onclick=()=>{ app._finishScope=b.dataset.scope; app.refreshSelPanel(); });
     p.querySelectorAll('[data-sw]').forEach(b=>b.onclick=()=>{
@@ -1465,12 +1696,14 @@ app.refreshSelPanel=function(){
     const cx=(zn.x0+zn.x1)/2, cz=(zn.z0+zn.z1)/2, zw=Math.abs(zn.x1-zn.x0), zd=Math.abs(zn.z1-zn.z0);
     p.innerHTML=`<h4>${icon('paint-roller')} Surface • ${app.zoneName(zn)}</h4><div class="sub">Drag in 2D to move • size below • material shows in 3D with direction + scale.</div>
       <label class="f">Material <select id="zM">${ZONE_MATS.map(m=>`<option value="${m.id}"${zn.mat===m.id?' selected':''}>${m.name}</option>`).join('')}</select></label>
+      <button class="btn small primary" id="zOpenTexMenu" type="button" style="width:100%;margin:6px 0;display:flex;align-items:center;justify-content:center;gap:6px;"><i data-lucide="palette"></i> All Textures &amp; Colors Menu</button>
       <label class="f">Tint <input type="color" id="zC" value="${toColor(zn.color||'#ffffff')}"></label>
       <label class="f">Direction <input type="range" id="zA" min="0" max="90" step="5" value="${zn.angle||0}"> <b>${zn.angle||0}°</b></label>
       <label class="f">Tile size <input type="range" id="zS" min="0.4" max="4" step="0.2" value="${zn.scale||1.2}"> <b>${(zn.scale||1.2).toFixed(1)}m</b></label>
       <label class="f">Width <input type="range" id="zW" min="0.5" max="20" step="0.1" value="${zw}"> <b>${zw.toFixed(1)}m</b></label>
       <label class="f">Depth <input type="range" id="zD" min="0.5" max="20" step="0.1" value="${zd}"> <b>${zd.toFixed(1)}m</b></label>
       <div class="rowBtns"><button class="btn" id="zDup">⧉ Duplicate</button><button class="btn danger" id="zDel">Delete</button><button class="btn" id="zX">Close</button></div>`;
+    $('#zOpenTexMenu').onclick=()=>openDrawer('Tex',true);
     $('#zM').onchange=e=>{ app.pushUndo(); zn.mat=e.target.value; zn.color='#ffffff'; saveState(app.state); app.syncAll(); };
     $('#zC').oninput=e=>{ zn.color=e.target.value; app.dirty(false); app.view2d.request(); app.view3d.rebuild(); queueSave(); };
     $('#zA').oninput=e=>{ zn.angle=+e.target.value; e.target.nextElementSibling.textContent=zn.angle+'°'; app.dirty(false); app.view2d.request(); app.view3d.rebuild(); queueSave(); };
@@ -1936,18 +2169,205 @@ async function asAsk(){
   if(btn) btn.disabled=false;
 }
 
+// Google Sign-In & Profile UI handling
+function initGoogleAuthUI(){
+  const loggedOutBlock = $('#settingsGoogleLoggedOut');
+  const loggedInBlock = $('#settingsGoogleLoggedIn');
+  const nameEl = $('#settingsUserName');
+  const emailEl = $('#settingsUserEmail');
+  const avatarEl = $('#settingsUserAvatar');
+  const signOutBtn = $('#settingsSignOutBtn');
+  const signInBtn = $('#settingsSignInBtn');
+  const autoGoogleBtn = $('#autoLoginGoogleBtn');
+  const autoGuestBtn = $('#autoLoginGuestBtn');
+
+  function updateSettingsUI(user){
+    if(user && user.email){
+      if(loggedOutBlock) loggedOutBlock.style.display = 'none';
+      if(loggedInBlock) loggedInBlock.style.display = 'flex';
+      if(nameEl) nameEl.textContent = user.name || user.email;
+      if(emailEl) emailEl.textContent = user.email;
+      if(avatarEl){
+        if(user.picture){
+          avatarEl.src = user.picture;
+          avatarEl.style.display = 'block';
+        } else {
+          avatarEl.style.display = 'none';
+        }
+      }
+    } else {
+      if(loggedOutBlock) loggedOutBlock.style.display = 'flex';
+      if(loggedInBlock) loggedInBlock.style.display = 'none';
+    }
+    refreshIcons();
+  }
+
+  googleAuth.onAuth(updateSettingsUI);
+
+  // Settings Log out button
+  if(signOutBtn){
+    signOutBtn.onclick = async ()=>{
+      const u = googleAuth.getUser();
+      if(confirm(`Are you sure you want to log out from ${u?.email || 'your Google account'}?`)){
+        await googleAuth.signOut();
+        toast('Logged out from Google account');
+        updateSettingsUI(null);
+      }
+    };
+  }
+
+  // Settings Sign in button
+  if(signInBtn){
+    signInBtn.onclick = async ()=>{
+      toast('Opening Google Sign-In…');
+      try {
+        const u = await googleAuth.signIn();
+        toast(`Signed in as ${u.name || u.email}`);
+      } catch(err) {
+        if(String(err?.message||err).includes('cancelled')){
+          toast('Sign-in cancelled');
+        } else {
+          toast(`Sign-in error: ${err.message||err}`);
+        }
+      }
+    };
+  }
+
+  // Auto-login prompt buttons
+  if(autoGoogleBtn){
+    autoGoogleBtn.onclick = async ()=>{
+      toast('Opening Google Sign-In…');
+      try {
+        const u = await googleAuth.signIn();
+        $('#autoLoginVeil').classList.remove('on');
+        toast(`Welcome, ${u.name || u.email}!`);
+      } catch(err) {
+        if(String(err?.message||err).includes('cancelled')){
+          toast('Sign-in cancelled');
+        } else {
+          toast(`Sign-in error: ${err.message||err}`);
+        }
+      }
+    };
+  }
+
+  if(autoGuestBtn){
+    autoGuestBtn.onclick = ()=>{
+      $('#autoLoginVeil').classList.remove('on');
+      sessionStorage.setItem('h3d_guest_choice', '1');
+      toast('Continuing as guest (offline mode)');
+    };
+  }
+
+  // Automatically ask the user to log in if not signed in
+  const savedUser = googleAuth.getUser();
+  if(!savedUser && !sessionStorage.getItem('h3d_guest_choice')){
+    setTimeout(()=>{
+      if(!googleAuth.getUser()){
+        $('#autoLoginVeil').classList.add('on');
+      }
+    }, 280);
+  }
+}
+
 // wire UI
 function wire(){
+  const topUndo=$('#undoBtnTop'), floatUndo=$('#floatingUndoBtn');
+  const topRedo=$('#redoBtnTop'), floatRedo=$('#floatingRedoBtn');
+
+  function triggerUndo(e){
+    if(e){ e.preventDefault(); e.stopPropagation(); }
+    app.doUndo();
+  }
+  function triggerRedo(e){
+    if(e){ e.preventDefault(); e.stopPropagation(); }
+    app.doRedo();
+  }
+
+  for(const btn of [topUndo, floatUndo]){
+    if(!btn) continue;
+    btn.style.pointerEvents = 'auto';
+    btn.addEventListener('click', triggerUndo);
+    btn.addEventListener('pointerdown', (e) => {
+      btn.style.transform = 'scale(0.86)';
+      setTimeout(() => { btn.style.transform = ''; }, 140);
+    });
+  }
+
+  for(const btn of [topRedo, floatRedo]){
+    if(!btn) continue;
+    btn.style.pointerEvents = 'auto';
+    btn.addEventListener('click', triggerRedo);
+    btn.addEventListener('pointerdown', (e) => {
+      btn.style.transform = 'scale(0.86)';
+      setTimeout(() => { btn.style.transform = ''; }, 140);
+    });
+  }
+
+  // Draggable floating dock
+  const dock = $('#floatingUndoRedo');
+  if(dock){
+    let isDragging = false, startX = 0, startY = 0, origLeft = 0, origTop = 0, moved = false;
+    dock.addEventListener('pointerdown', (e) => {
+      if(e.target.closest('button')) return; // buttons tap cleanly
+      isDragging = true; moved = false;
+      startX = e.clientX; startY = e.clientY;
+      const r = dock.getBoundingClientRect();
+      origLeft = r.left; origTop = r.top;
+      try{ dock.setPointerCapture(e.pointerId); }catch(_){}
+    });
+    dock.addEventListener('pointermove', (e) => {
+      if(!isDragging) return;
+      const dx = e.clientX - startX, dy = e.clientY - startY;
+      if(Math.hypot(dx, dy) > 4) moved = true;
+      if(moved){
+        dock.style.left = Math.max(10, Math.min(window.innerWidth - 86, origLeft + dx)) + 'px';
+        dock.style.top = Math.max(10, Math.min(window.innerHeight - 48, origTop + dy)) + 'px';
+        dock.style.right = 'auto'; dock.style.bottom = 'auto';
+      }
+    });
+    const stopDrag = (e) => {
+      if(isDragging){
+        isDragging = false;
+        try{ dock.releasePointerCapture(e.pointerId); }catch(_){}
+      }
+    };
+    dock.addEventListener('pointerup', stopDrag);
+    dock.addEventListener('pointercancel', stopDrag);
+  }
+
+  const texB=$('#drawerTexBtn'); if(texB) texB.onclick=()=>openDrawer('Tex');
+  const texC=$('#drawerTexClose'); if(texC) texC.onclick=()=>openDrawer('Tex',false);
+  const texS=$('#drawerTexSearch'); if(texS) texS.oninput=()=>renderTextureStudioDrawer();
+  document.querySelectorAll('#texChipsBar .fchip').forEach(chip=>{
+    chip.onclick=()=>{
+      document.querySelectorAll('#texChipsBar .fchip').forEach(c=>c.classList.remove('on'));
+      chip.classList.add('on');
+      renderTextureStudioDrawer();
+    };
+  });
+  const atDone=$('#activeTexDone'); if(atDone) atDone.onclick=()=>{ app.activeTexture=null; const h=$('#activeTexHUD'); if(h) h.hidden=true; };
+  const atScope=$('#activeTexScope'); if(atScope) atScope.onchange=e=>{ app._finishScope=e.target.value; };
+
   $('#drawerLBtn').onclick=()=>openDrawer('L');
   $('#drawerRBtn').onclick=()=>openDrawer('R');
   $('#mode2dBtn').onclick=()=>setMode('2d');
   $('#mode3dBtn').onclick=()=>setMode('3d');
-  $('#floorSel').onchange=e=>{ app.state.activeFloor=+e.target.value; app.select(null); app.view2d.draft=[]; saveState(app.state); app.syncAll(); };
+  const ambBtn=$('#ambienceBtn');
+  if(ambBtn){
+    ambBtn.onclick=()=>{
+      const isPlaying=sound.toggleAmbience();
+      ambBtn.classList.toggle('on', isPlaying);
+      toast(isPlaying?'Soothing ambience active (summer breeze & warmth)':'Soothing ambience paused');
+    };
+  }
+  $('#floorSel').onchange=e=>{ sound.playFloorWhoosh(); app.state.activeFloor=+e.target.value; app.select(null); app.view2d.draft=[]; saveState(app.state); app.syncAll(); };
   $('#floorAddBtn').onclick=()=>addFloor();
   $('#addFloorBtn').onclick=()=>addFloor();
   $('#floorMenuBtn').onclick=()=>{ renderFloorList(); $('#floorVeil').classList.add('on'); };
   $('#closeFloorBtn').onclick=()=>$('#floorVeil').classList.remove('on');
   $('#dupFloorBtn').onclick=()=>{
+    sound.playFloorWhoosh();
     app.pushUndo();
     const src=app.curFloor();
     const cp=JSON.parse(JSON.stringify(src)); cp.id=uid('f'); cp.name=src.name+' copy';
@@ -1981,7 +2401,7 @@ function wire(){
   $('#focusCatBtn').onclick=()=>{ app.setFocus(false); openDrawer('L',true); };
   $('#drawerLClose').onclick=()=>openDrawer('L',false);
   $('#drawerRClose').onclick=()=>openDrawer('R',false);
-  document.querySelector('#views').addEventListener('pointerdown',e=>{ if(e.target&&e.target.tagName==='CANVAS'){ openDrawer('L',false); openDrawer('R',false); } });
+  document.querySelector('#views').addEventListener('pointerdown',e=>{ if(e.target&&e.target.tagName==='CANVAS'){ openDrawer('L',false); openDrawer('R',false); openDrawer('Tex',false); } });
   $('#closeSettingsBtn').onclick=()=>$('#settingsVeil').classList.remove('on');
   window.matchMedia?.('(orientation: landscape)').addEventListener?.('change',()=>app.applyLayout());
   $('#closeMenuBtn').onclick=()=>$('#menuVeil').classList.remove('on');
@@ -2136,6 +2556,7 @@ function wire(){
   document.querySelectorAll('.veil').forEach(v=>v.addEventListener('pointerdown',e=>{ if(e.target===v) v.classList.remove('on'); }));
 }
 function addFloor(){
+  sound.playFloorWhoosh();
   app.pushUndo();
   const idx=app.state.floors.length;
   const nf=defaultFloor(idx===0?'Ground Floor':`Floor ${idx+1}`,idx);
@@ -2148,19 +2569,26 @@ function addFloor(){
   app.fitStairs();
   saveState(app.state); app.syncAll(); toast(nf.name+' added');
 }
-function setMode(m){
+async function setMode(m){
+  if(app.mode!==m) sound.playFloorWhoosh();
   app.mode=m;
   $('#mode2dBtn').classList.toggle('on',m==='2d');
   $('#mode3dBtn').classList.toggle('on',m==='3d');
   $('#view2dWrap').hidden=m!=='2d';
   $('#view3dWrap').hidden=m!=='3d';
-  if(m==='3d'){ app.view3d.resize(); app.view3d.rebuild(); }
+  if(m==='3d'){
+    if(app._init3DPromise && !app.view3d.ready){
+      await app._init3DPromise;
+    }
+    app.view3d.resize(); app.view3d.rebuild();
+  }
   else app.view2d.resize();
 }
 
 // ---------- init ----------
 async function boot(){
-  buildTools(); buildTabs(); wire(); refreshIcons();
+  buildTools(); buildTabs(); wire(); initGoogleAuthUI(); refreshIcons();
+  app.updateUndoRedoUI();
   try{ const dl=localStorage.getItem('hc.drawerL'), dr=localStorage.getItem('hc.drawerR'); openDrawer('L',dl==null?window.innerWidth>900:dl==='1'); openDrawer('R',dr==='1'); }catch(e){ openDrawer('L',window.innerWidth>900); }
   renderFloorSel(); renderFloorList();
   $('#snapVal').textContent=Math.round((app.state.settings.snap||0.25)*100)+'cm';
@@ -2172,16 +2600,26 @@ async function boot(){
   app.view3d=new View3D($('#gl'),app);
   app.view3d.showAll=app.state.settings.showAll3D!==false;
   app.applyLayout();
-  try{
-    await app.view3d.init(m=>{ $('#bootMsg').textContent=m+'…'; });
-  }catch(e){ console.error(e); $('#bootMsg').textContent='3D failed to load (network needed for Three.js CDN). 2D still works.'; }
-  // load custom templates
-  for(const c of app.custom){ try{ await app.loadCustomTemplate(c); }catch(e){} }
+
   app._renderGrid?.();
   try{ app.matStudio=new MaterialStudio(app); app.matStudio.init(); }catch(e){ console.warn('studio init fail',e); }
-  $('#boot').style.display='none';
+
+  // Instant app boot: hide loader immediately so 2D plan is usable instantly
+  const bootEl = $('#boot');
+  if(bootEl) bootEl.style.display='none';
   app.refreshSelPanel();
-  // preload wallpaper? no
+
+  // Initialize 3D in background asynchronously without blocking initial load
+  app._init3DPromise = (async()=>{
+    try{
+      await app.view3d.init(m=>{});
+      for(const c of app.custom){ try{ await app.loadCustomTemplate(c); }catch(e){} }
+      if(app.mode==='3d'){ app.view3d.resize(); app.view3d.rebuild(); }
+    }catch(e){
+      console.warn('3D initialization note', e);
+    }
+  })();
+
   window.addEventListener('resize',()=>{ app.view2d.resize(); app.view3d.resize(); });
   // keyboard
   window.addEventListener('keydown',e=>{
@@ -2190,14 +2628,6 @@ async function boot(){
     if(e.key==='Escape'){ if(app.view2d.draft.length){ app.view2d.draft=[]; app.view2d.request(); app.refreshSelPanel(); } else if(app.view2d.roomDraft.length||app.view2d.meas.length){ app.view2d.roomDraft=[]; app.view2d.meas=[]; app.view2d.request(); } else app.select(null); }
     if(e.key==='Enter'&&app.view2d.draft.length){ document.querySelector('#wDone')?.click(); }
   });
-  toast('Welcome — draw walls, furnish, toggle 3D');
-  try{
-    const ORIGINAL='home-builder-3d';
-    window.__HC_ORIGINAL=ORIGINAL;
-    if(window.generatorName&&window.generatorName!==ORIGINAL){
-      const lg=document.querySelector('#logo'); if(lg) lg.title='A community copy of HomeCraft 3D • original: '+ORIGINAL;
-      setTimeout(()=>toast('A community copy of HomeCraft 3D — original: '+ORIGINAL,3400),2600);
-    }
-  }catch(e){}
+  toast('Welcome to Home Design 3D');
 }
 boot();

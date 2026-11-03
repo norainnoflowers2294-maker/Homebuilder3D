@@ -9,6 +9,8 @@
     "build": "echo 'Static build ready'"
   },
   "dependencies": {
-    "express": "^4.21.2"
+    "compression": "^1.8.2",
+    "express": "^4.21.2",
+    "three": "^0.187.0"
   }
 }

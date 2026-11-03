@@ -462,9 +462,10 @@ export function tex(THREE, name, rx=1, ry=1){
 
 export const LIGHTING={
   day:      {sun:0xfff2dd,sunI:2.6,sky:0xbfd4ff,gnd:0x8a7a66,hemiI:0.9,bg:0x9fc3e8,fog:[60,220],exp:1.0,int:0.25,pos:[14,20,9],skyTop:0x3f7cd6,skyBot:0xcfe4f7,stars:0},
+  golden:   {sun:0xffab52,sunI:2.35,sky:0xffecd1,gnd:0x6b533d,hemiI:0.85,bg:0xf2c89b,fog:[55,210],exp:1.05,int:0.75,pos:[-18,8,-8],skyTop:0x60457a,skyBot:0xfef5e7,stars:0.05,ambientHue:0xfef5e7,amberGlow:true},
   morning:  {sun:0xffd9a8,sunI:2.2,sky:0xcfe0ff,gnd:0x8a7a66,hemiI:0.8,bg:0xa8c8e8,fog:[55,210],exp:1.0,int:0.35,pos:[-16,9,10],skyTop:0x5a8fd6,skyBot:0xf2ddc0,stars:0},
   afternoon:{sun:0xfff6e8,sunI:2.8,sky:0xc4d9ff,gnd:0x8a7a66,hemiI:0.95,bg:0x9cc0e6,fog:[60,220],exp:1.02,int:0.2,pos:[4,22,-14],skyTop:0x3a76cf,skyBot:0xd4e6f5,stars:0},
-  sunset:   {sun:0xff9a4d,sunI:2.0,sky:0xe8a06a,gnd:0x5a4a3a,hemiI:0.55,bg:0xd9885a,fog:[50,190],exp:1.0,int:0.55,pos:[-20,6,-6],skyTop:0x2e3a7a,skyBot:0xf2a05a,stars:0.25},
+  sunset:   {sun:0xff8d36,sunI:2.2,sky:0xf8b486,gnd:0x543f30,hemiI:0.70,bg:0xde8256,fog:[50,190],exp:1.04,int:0.85,pos:[-21,5.5,-6],skyTop:0x38346b,skyBot:0xfef5e7,stars:0.25,ambientHue:0xfef5e7,amberGlow:true},
   night:    {sun:0x8fa8ff,sunI:0.35,sky:0x2a3a5a,gnd:0x1a1a22,hemiI:0.35,bg:0x0b1220,fog:[40,160],exp:0.95,int:1.0,pos:[10,18,-8],skyTop:0x04060f,skyBot:0x101a30,stars:1},
 };
 
@@ -573,3 +574,80 @@ export const POOL_WATERS=[
   {id:'teal', name:'Teal night', icon:'🌙', base:'#14606e'},
 ];
 export const POOL_WATER_MAP=Object.fromEntries(POOL_WATERS.map(f=>[f.id,f]));
+
+// Designer Color Palettes for walls, surfaces, and furniture
+export const DESIGNER_COLORS = [
+  { id:'c_cream', name:'Warm Alabaster', hex:'#f5f0e6', cat:'neutral' },
+  { id:'c_linen', name:'Natural Linen', hex:'#e8e1d3', cat:'neutral' },
+  { id:'c_greige', name:'Nordic Greige', hex:'#d3ccc1', cat:'neutral' },
+  { id:'c_taupe', name:'Warm Taupe', hex:'#a89f91', cat:'neutral' },
+  { id:'c_charcoal', name:'Luxe Charcoal', hex:'#2a2d34', cat:'dark' },
+  { id:'c_black', name:'Obsidian Black', hex:'#171719', cat:'dark' },
+  { id:'c_navy', name:'Midnight Navy', hex:'#1b293d', cat:'bold' },
+  { id:'c_forest', name:'Hunter Green', hex:'#223b2e', cat:'bold' },
+  { id:'c_terracotta', name:'Tuscan Terracotta', hex:'#b85a3c', cat:'warm' },
+  { id:'c_ochre', name:'Golden Ochre', hex:'#d49d3d', cat:'warm' },
+  { id:'c_olive', name:'Muted Olive', hex:'#6b7352', cat:'earth' },
+  { id:'c_sage', name:'Soft Sage', hex:'#9eb09b', cat:'earth' },
+  { id:'c_clay', name:'Desert Clay', hex:'#c48f78', cat:'warm' },
+  { id:'c_blush', name:'Dusty Rose', hex:'#d9a79c', cat:'pastel' },
+  { id:'c_sky', name:'Nordic Fog Blue', hex:'#9fb5c7', cat:'pastel' },
+  { id:'c_lavender', name:'Muted Lavender', hex:'#b8adcc', cat:'pastel' },
+  { id:'c_purewhite', name:'Chantilly White', hex:'#ffffff', cat:'neutral' },
+  { id:'c_goldaccent', name:'Architectural Brass', hex:'#c99d42', cat:'metal' }
+];
+
+const _thumbCache = new Map();
+
+/**
+ * Returns a high-resolution dataURL preview of any procedural texture or solid color
+ */
+export function getTextureThumb(m, size = 96) {
+  if (!m) return '';
+  const isColor = !!m.hex;
+  const texName = isColor ? 'wallpaint' : (m.tex || m.id || 'wallpaint');
+  const baseColor = m.hex || m.base || '#ffffff';
+  const key = `${texName}|${baseColor}|${size}`;
+  if (_thumbCache.has(key)) return _thumbCache.get(key);
+
+  try {
+    const canvas = document.createElement('canvas');
+    canvas.width = canvas.height = size;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return '';
+
+    if (isColor) {
+      // Clean luxury swatch with subtle ambient border
+      ctx.fillStyle = baseColor;
+      ctx.fillRect(0, 0, size, size);
+      // subtle vignette
+      const grd = ctx.createRadialGradient(size/2, size/2, size*0.2, size/2, size/2, size*0.7);
+      grd.addColorStop(0, 'rgba(255,255,255,0.08)');
+      grd.addColorStop(1, 'rgba(0,0,0,0.14)');
+      ctx.fillStyle = grd;
+      ctx.fillRect(0, 0, size, size);
+    } else {
+      const painter = painters[texName];
+      if (painter) {
+        painter(ctx, size);
+        if (baseColor && baseColor !== '#ffffff') {
+          ctx.fillStyle = baseColor;
+          ctx.globalCompositeOperation = 'multiply';
+          ctx.fillRect(0, 0, size, size);
+          ctx.globalCompositeOperation = 'source-over';
+        }
+      } else {
+        ctx.fillStyle = baseColor;
+        ctx.fillRect(0, 0, size, size);
+        grain(ctx, size, RNG(42), 600, 0.04, false);
+      }
+    }
+    const dataUrl = canvas.toDataURL('image/png');
+    _thumbCache.set(key, dataUrl);
+    return dataUrl;
+  } catch (e) {
+    return '';
+  }
+}
+
+export { painters };

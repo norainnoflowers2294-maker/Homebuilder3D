@@ -1,3 +1,5 @@
+import { FINISHES, ZONE_MATS, getTextureThumb, DESIGNER_COLORS } from './mats.js';
+
 /**
  * Advanced 3D Color, Material & Texture Customization Studio
  */
@@ -227,22 +229,86 @@ export class MaterialStudio {
     const grid = document.getElementById('matTextureGrid');
     if (!grid) return;
     grid.innerHTML = '';
+    
+    // Ensure preview box exists
+    let prevBox = document.getElementById('texHoverPreview');
+    if (!prevBox) {
+      prevBox = document.createElement('div');
+      prevBox.id = 'texHoverPreview';
+      prevBox.style.cssText = 'position:fixed;display:none;z-index:9999;pointer-events:none;background:#fffdf7;border:1.5px solid var(--gold);box-shadow:0 12px 32px rgba(26,22,17,0.22);border-radius:10px;padding:8px;text-align:center;width:150px;backdrop-filter:blur(8px);';
+      document.body.appendChild(prevBox);
+    }
+
     this.textureLibrary.forEach(tex => {
       const card = document.createElement('div');
       card.className = 'texCard';
-      card.innerHTML = `<img src="${tex.dataUrl}"><span>${tex.name}</span>`;
+      card.draggable = true;
+      card.style.cssText = 'cursor:grab;position:relative;user-select:none;';
+      card.innerHTML = `<img src="${tex.dataUrl}" alt="${tex.name}" draggable="false"><span style="display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${tex.name}</span><small style="font-size:9px;color:var(--mut);display:block;">Drag to apply</small>`;
+
+      // Drag and drop onto 3D viewport or objects
+      card.ondragstart = (e) => {
+        card.style.opacity = '0.5';
+        const payload = {
+          type: 'texture',
+          tex: tex.tex || tex.id,
+          dataUrl: tex.dataUrl,
+          name: tex.name
+        };
+        e.dataTransfer.setData('application/json', JSON.stringify(payload));
+        e.dataTransfer.effectAllowed = 'copy';
+      };
+      card.ondragend = () => {
+        card.style.opacity = '1';
+        if (prevBox) prevBox.style.display = 'none';
+      };
+
+      // Hover texture preview
+      card.onmouseenter = (e) => {
+        prevBox.innerHTML = `
+          <div style="width:130px;height:130px;border-radius:6px;overflow:hidden;margin:0 auto 6px;border:1px solid var(--line);background:#000;">
+            <img src="${tex.dataUrl}" style="width:100%;height:100%;object-fit:cover;display:block;">
+          </div>
+          <b style="font-size:11.5px;color:var(--txt);display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${tex.name}</b>
+          <div style="font-size:10px;color:var(--gold);font-weight:700;">Drag onto wall or object in 3D</div>
+        `;
+        prevBox.style.display = 'block';
+        const rect = card.getBoundingClientRect();
+        prevBox.style.left = Math.max(10, rect.left - 160) + 'px';
+        prevBox.style.top = Math.max(10, rect.top - 20) + 'px';
+      };
+      card.onmouseleave = () => {
+        if (prevBox) prevBox.style.display = 'none';
+      };
+
       card.onclick = () => this.applyTexture(tex.dataUrl);
       grid.appendChild(card);
     });
   }
 
   loadTextureLibrary() {
-    try { return JSON.parse(localStorage.getItem('homecraft_custom_textures') || '[]'); } catch { return []; }
+    const builtIn = [...FINISHES, ...ZONE_MATS].map(m => ({
+      id: m.id,
+      tex: m.tex,
+      name: m.name,
+      dataUrl: getTextureThumb(m, 128)
+    }));
+    try {
+      const customs = JSON.parse(localStorage.getItem('homecraft_custom_textures') || '[]');
+      return [...customs, ...builtIn];
+    } catch {
+      return builtIn;
+    }
   }
+
   loadPalettes() {
     return [
       { name: 'Warm Villa', colors: ['#e6c894', '#a85b3b', '#395b50', '#f4ede2', '#2c221e'] },
-      { name: 'Modern Neutral', colors: ['#ffffff', '#222224', '#7d828a', '#c7a77b', '#f2f3f5'] }
+      { name: 'Modern Neutral', colors: ['#ffffff', '#222224', '#7d828a', '#c7a77b', '#f2f3f5'] },
+      { name: 'Japandi Earth', colors: ['#e8e0d5', '#c4b5a0', '#8c7d6b', '#5c5247', '#2e2924'] },
+      { name: 'Luxe Midnight', colors: ['#171b26', '#263447', '#425873', '#94adc9', '#dce7f2'] },
+      { name: 'Tuscan Terracotta', colors: ['#f2e3d5', '#d99879', '#b35d3b', '#85371c', '#4a1e0f'] },
+      { name: 'Parisian Chic', colors: ['#ffffff', '#e8dfd8', '#cca99c', '#73605b', '#2e2523'] }
     ];
   }
   renderPalettesList() {
