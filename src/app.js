@@ -9,7 +9,7 @@ import { View2D } from './view2d.js';
 import { View3D } from './view3d.js';
 import { initDrive } from './drive.js';
 import { initDropbox } from './dropbox.js';
-import { initBackendUI } from './supabase/ui.js';
+import { initBackendUI } from '../supabase/ui.js';
 import { googleAuth } from './google_auth.js';
 import { sound } from './sound.js';
 
