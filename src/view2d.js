@@ -1,6 +1,5 @@
 // 2D plan view: top-down canvas, pan/zoom, draw + select. XZ plane, +x right, +z DOWN on screen (map z to y).
 import { defById } from './catalog.js';
-import { thumbNow } from './thumbs.js';
 
 function rRect(ctx, x, y, w, h, r) {
   if (ctx.roundRect) {
