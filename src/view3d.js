@@ -663,6 +663,9 @@ export class View3D {
         try{ const tx=new THREE.TextureLoader().load(fl.customTextureUrl); tx.wrapS=tx.wrapT=THREE.RepeatWrapping; tx.repeat.set(Math.max(1,s.w/2),Math.max(1,s.d/2)); wear.material.map=tx; wear.material.color.set('#ffffff'); wear.material.needsUpdate=true; }catch(e){}
       }
       wear.rotation.x=-Math.PI/2; wear.position.set(s.cx||0,topY+0.005,s.cz||0);
+      // The visible finish plane sits above the slab and receives the tap first.
+      // Give it the same floor-selection target so tapping the actual floor works.
+      wear.userData[NS]={type:'slab',floor:fi,id:fl.id||'slab'};
       wear.receiveShadow=true; g.add(wear);
 
       for(const w of fl.walls){
