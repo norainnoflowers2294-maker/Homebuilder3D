@@ -1195,6 +1195,54 @@ function armCatalogDef(def,card){
   app.hideCtxBar(); app.showCtxBarPlace(); app.refreshSelPanel();
 }
 
+function wireCatalogPointerDrag(card,def){
+  let start=null, dragging=false, ghost=null, pointerId=null;
+  const cleanup=()=>{
+    if(ghost){ ghost.remove(); ghost=null; }
+    card.style.opacity='';
+    start=null; dragging=false; pointerId=null;
+  };
+  card.addEventListener('pointerdown',e=>{
+    if(e.button!==undefined&&e.button!==0) return;
+    start={x:e.clientX,y:e.clientY}; dragging=false; pointerId=e.pointerId;
+    try{ card.setPointerCapture(e.pointerId); }catch(_){}
+  });
+  card.addEventListener('pointermove',e=>{
+    if(!start||e.pointerId!==pointerId) return;
+    if(!dragging&&Math.hypot(e.clientX-start.x,e.clientY-start.y)>9){
+      dragging=true; e.preventDefault(); card.style.opacity='.45';
+      armCatalogDef(def,card);
+      ghost=document.createElement('div');
+      ghost.textContent='＋ '+def.name;
+      Object.assign(ghost.style,{position:'fixed',left:(e.clientX+12)+'px',top:(e.clientY+12)+'px',zIndex:'99999',pointerEvents:'none',padding:'10px 14px',borderRadius:'14px',background:'rgba(25,25,30,.92)',color:'#fff',font:'600 13px system-ui',boxShadow:'0 8px 24px rgba(0,0,0,.25)',maxWidth:'180px'});
+      document.body.appendChild(ghost);
+    }
+    if(dragging&&ghost){ ghost.style.left=(e.clientX+12)+'px'; ghost.style.top=(e.clientY+12)+'px'; e.preventDefault(); }
+  });
+  const finish=e=>{
+    if(!start||e.pointerId!==pointerId) return;
+    const wasDragging=dragging;
+    if(wasDragging){
+      e.preventDefault(); e.stopPropagation();
+      card._catalogDragSuppressClick=true;
+      const inside=(cv)=>{ if(!cv) return false; const r=cv.getBoundingClientRect(); return e.clientX>=r.left&&e.clientX<=r.right&&e.clientY>=r.top&&e.clientY<=r.bottom; };
+      if(app.mode==='2d'&&inside(app.view2d?.cv)){
+        const p=app.view2d.s2w(e.clientX,e.clientY);
+        app.placeFurniture(app.view2d.snap(p.x),app.view2d.snap(p.z));
+        app.pendingDef=null; app.tool='select'; buildTools(); app.hideCtxBar();
+      } else if(app.mode==='3d'&&inside(app.view3d?.cv)&&app.view3d?.ready){
+        app.placeAt3D(e.clientX,e.clientY);
+        app.pendingDef=null; app.tool='select'; buildTools(); app.hideCtxBar();
+      } else {
+        toast('Drop the item inside the 2D plan or 3D room');
+      }
+    }
+    cleanup();
+  };
+  card.addEventListener('pointerup',finish);
+  card.addEventListener('pointercancel',finish);
+}
+
 function drawItemGrid(defs,emptyText){
   if(!defs.length){ const d=document.createElement('div'); d.className='dempty'; d.textContent=emptyText||'Nothing here yet.'; return d; }
   const grid=document.createElement('div'); grid.className='itemGrid';
@@ -1203,7 +1251,8 @@ function drawItemGrid(defs,emptyText){
     card.className='icard'+(app.pendingDef?.id===def.id&&app.tool==='furniture'?' on':'');
     card.innerHTML=icardHTML(def);
     const _im=card.querySelector('img'); if(_im&&!_im.getAttribute('src')) requestThumb(def,_im);
-    card.onclick=()=>armCatalogDef(def,card);
+    card.onclick=()=>{ if(card._catalogDragSuppressClick){ card._catalogDragSuppressClick=false; return; } armCatalogDef(def,card); };
+    wireCatalogPointerDrag(card,def);
     grid.appendChild(card);
   }
   return grid;
