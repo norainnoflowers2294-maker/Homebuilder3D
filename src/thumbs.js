@@ -55,16 +55,17 @@ function simpleH(){
     });
     materialCache.set(key,m); return m;
   };
+  const tmat=(c,texName,rx=1,ry=1,rough=0.72,metal=0)=> {
+    const m=mat(c,rough,metal,texName==='marble'||texName==='tile'?0.28:0.05);
+    try{ const t=tex(THREE,texName||'wallpaint',rx||1,ry||1); if(t){ m.map=t; m.bumpMap=t; m.bumpScale=texName==='fabric'||texName==='carpet'?0.025:0.035; } }catch(e){}
+    return m;
+  };
   const put=(parent,geo,m)=>{ const o=new THREE.Mesh(geo,m); o.castShadow=true; o.receiveShadow=true; parent.add(o); return o; };
   return {
     mat,
-    tmat:(c,texName,rx=1,ry=1,rough=0.72,metal=0)=> {
-      const m=mat(c,rough,metal,texName==='marble'||texName==='tile'?0.28:0.05);
-      try{ const t=tex(THREE,texName||'wallpaint',rx||1,ry||1); if(t){ m.map=t; m.bumpMap=t; m.bumpScale=texName==='fabric'||texName==='carpet'?0.025:0.035; } }catch(e){}
-      return m;
-    },
+    tmat,
     box:(parent,w,h,d,c,x=0,y=0,z=0,ry=0)=>{ const o=put(parent,new THREE.BoxGeometry(w,h,d),mat(c)); o.position.set(x,y,z); o.rotation.y=ry; return o; },
-    tbox:(parent,w,h,d,c,texName,rx=1,ry=1,x=0,y=0,z=0,rough=0.72,metal=0)=>{ const o=put(parent,new THREE.BoxGeometry(w,h,d),this.tmat(c,texName,rx,ry,rough,metal)); o.position.set(x,y,z); return o; },
+    tbox:(parent,w,h,d,c,texName,rx=1,ry=1,x=0,y=0,z=0,rough=0.72,metal=0)=>{ const o=put(parent,new THREE.BoxGeometry(w,h,d),tmat(c,texName,rx,ry,rough,metal)); o.position.set(x,y,z); return o; },
     mbox:(parent,w,h,d,c,rough=0.32,metal=0.88,x=0,y=0,z=0)=>{ const o=put(parent,new THREE.BoxGeometry(w,h,d),mat(c,rough,metal,0.35)); o.position.set(x,y,z); return o; },
     cyl:(parent,rt,rb,h,c,x=0,y=0,z=0,seg=18)=>{ const o=put(parent,new THREE.CylinderGeometry(rt,rb,h,seg),mat(c)); o.position.set(x,y,z); return o; },
     glass:(parent,w,h,d,x=0,y=0,z=0,op=0.35,c='#bcd8ff')=>{ const o=put(parent,new THREE.BoxGeometry(w,h,d),new THREE.MeshPhysicalMaterial({color:new THREE.Color(c),transparent:true,opacity:op,roughness:0.06,metalness:0.04,transmission:0.72,ior:1.48,thickness:0.1})); o.position.set(x,y,z); return o; },
