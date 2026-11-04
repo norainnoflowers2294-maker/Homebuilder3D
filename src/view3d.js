@@ -303,6 +303,7 @@ export class View3D {
   bindInput(){
     const cv=this.cv;
     cv.addEventListener('pointerdown',e=>{
+      try{ cv.setPointerCapture(e.pointerId); }catch(err){}
       this._downPos={x:e.clientX,y:e.clientY}; this._moved=false; this._drag3d=null;
       this._pressedSel=null;
       // Remember the object under the finger. Mobile taps can drift a few pixels,
@@ -323,8 +324,9 @@ export class View3D {
         this.walk.yaw-=dx*0.004; this.walk.pitch=Math.max(-1.2,Math.min(1.2,this.walk.pitch-dy*0.004));
         this.applyWalkCam();
       }
-      if(this._drag3d && e.buttons) this._dragMove(e);
-      else if(!e.buttons) this._updateGhost(e);
+      // Keep dragging responsive on touch screens even when Safari reports buttons=0 mid-gesture.
+      if(this._drag3d && (e.buttons!==0 || e.pointerType==='touch')) this._dragMove(e);
+      else if(!e.buttons && !this._drag3d) this._updateGhost(e);
     });
     const up=e=>{
       const pressed=this._pressedSel;
