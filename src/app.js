@@ -2,11 +2,11 @@ import { MaterialStudio } from './material_studio.js';
 // HomeCraft 3D app orchestrator
 import { blankState, demoState, loadState, saveState, loadCustom, saveCustom, uid, floorBaseY, floorTopY, nextFloorRise, defaultFloor, normalizeState, resolveAttachments, roomRectAt, wallsInRect, projectOnWall, wallLen, shelfStackTop, currentProjectState, listProjectsMeta, createProject, renameProject, duplicateProject, deleteProject, loadProjectState, setCurrentPid } from './store.js';
 import { getCatalog, defById, CATEGORIES } from './catalog.js';
-import { requestThumb, thumbCached } from './thumbs.js';
+import { requestThumb, thumbCached } from './thumbs.js?v=20261104a';
 import { FINISHES, FINISH_MAP, ZONE_MATS, ZONE_MAP, POOL_WATERS, POOL_WATER_MAP, getTextureThumb, DESIGNER_COLORS } from './mats.js';
 import { POOL_SHAPES, shelfSlots } from './catalog_extra.js';
 import { View2D } from './view2d.js';
-import { View3D } from './view3d.js?v=20261103v';
+import { View3D } from './view3d.js?v=20261104a';
 import { initDrive } from './drive.js';
 import { initDropbox } from './dropbox.js';
 import { initBackendUI } from '../supabase/ui.js?v=20261103s';
