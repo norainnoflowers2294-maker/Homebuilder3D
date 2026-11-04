@@ -1249,6 +1249,7 @@ function drawItemGrid(defs,emptyText){
   for(const def of defs){
     const card=document.createElement('button');
     card.className='icard'+(app.pendingDef?.id===def.id&&app.tool==='furniture'?' on':'');
+    card.style.touchAction='none';
     card.innerHTML=icardHTML(def);
     const _im=card.querySelector('img'); if(_im&&!_im.getAttribute('src')) requestThumb(def,_im);
     card.onclick=()=>{ if(card._catalogDragSuppressClick){ card._catalogDragSuppressClick=false; return; } armCatalogDef(def,card); };
