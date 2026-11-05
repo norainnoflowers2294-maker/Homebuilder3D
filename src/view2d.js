@@ -369,7 +369,7 @@ export class View2D {
       this.request(); return;
     }
 
-    if(tool==='select'||tool==='move'){
+    if(tool==='select'||tool==='move'||(tool==='wall'&&!this.draft.length)){
       const quietDrag=true;
       if(!this._drag && this.downPos){
         const w0=this.s2w(this.downPos.x,this.downPos.y);
