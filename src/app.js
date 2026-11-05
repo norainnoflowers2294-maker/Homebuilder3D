@@ -1849,7 +1849,7 @@ function renderFloorList(){
     row.innerHTML=`<b style="flex:1;font-size:13px">${icon(i===0?'layers':'building-2')} ${i+1}. <span data-n>${f.name}</span><br><small style="color:var(--mut)">${f.walls.length} walls • ${f.items.length} items • ${f.wallHeight.toFixed(1)}m</small></b>`;
     const go=document.createElement('button'); go.className='btn small'; go.textContent=i===app.state.activeFloor?'● current':'Edit'; go.onclick=()=>{ app.state.activeFloor=i; saveState(app.state); app.select(null); app.view2d.fit(); app.syncAll(); $('#floorVeil').classList.remove('on'); };
     const rn=document.createElement('button'); rn.className='btn small'; rn.innerHTML=icon('pencil'); rn.title='Rename floor'; rn.onclick=()=>{ const n=prompt('Floor name',f.name); if(n){ app.pushUndo(); f.name=n.slice(0,30); saveState(app.state); app.syncAll(); } };
-    const del=document.createElement('button'); del.className='btn small danger'; del.innerHTML=icon('trash-2'); del.title='Delete floor'; del.onclick=()=>{ if(app.state.floors.length<=1){ toast('Need at least one floor'); return; } if(!confirm('Delete '+f.name+'?')) return; app.pushUndo(); app.state.floors.splice(i,1); app.state.activeFloor=Math.max(0,Math.min(app.state.activeFloor,app.state.floors.length-1)); app.fitStairs(); saveState(app.state); app.syncAll(); };
+    const del=document.createElement('button'); del.className='btn small danger'; del.innerHTML=icon('trash-2')+' Delete'; del.title='Delete entire floor'; del.setAttribute('aria-label','Delete entire floor'); del.onclick=()=>{ if(app.state.floors.length<=1){ toast('Keep at least one floor in the house'); return; } if(!confirm('Delete the entire '+f.name+', including its walls, doors, windows, furniture, and finishes?')) return; app.pushUndo(); app.state.floors.splice(i,1); app.state.activeFloor=Math.max(0,Math.min(app.state.activeFloor,app.state.floors.length-1)); app.fitStairs(); saveState(app.state); app.syncAll(); toast(f.name+' deleted'); };
     row.append(go,rn,del); el.appendChild(row);
   });
 }
@@ -2705,7 +2705,19 @@ function wire(){
   if(wR) wR.oninput=e=>{ app.state.settings.warmth=+e.target.value; app.view3d.applyGraphics(); };
   if(wR) wR.onchange=()=>queueSave();
   if(shS) shS.onchange=e=>{ app.view3d.setShadows(e.target.value==='on'); };
-  if(rfS) rfS.onchange=e=>{ const on=e.target.value==='on'; for(let i=app.state.floors.length-1;i>=0;i--){ const fl=app.state.floors[i]; if(fl.walls.length){ fl.roof=fl.roof||{}; fl.roof.on=on; break; } } app.pushUndo(); queueSave(); app.view3d.rebuild(); };
+  if(rfS) rfS.onchange=e=>{ const on=e.target.value==='on'; app.pushUndo(); for(let i=app.state.floors.length-1;i>=0;i--){ const fl=app.state.floors[i]; if(fl.walls.length){ fl.roof=fl.roof||{}; fl.roof.on=on; break; } } queueSave(); app.view3d.rebuild(); };
+  const removeRoofBtn=$('#removeRoofBtn');
+  if(removeRoofBtn) removeRoofBtn.onclick=()=>{
+    let target=null;
+    for(let i=app.state.floors.length-1;i>=0;i--){ if(app.state.floors[i].walls.length){ target=app.state.floors[i]; break; } }
+    if(!target || target.roof?.on===false){ toast('There is no roof to remove'); return; }
+    app.pushUndo();
+    target.roof={...(target.roof||{}),on:false};
+    if(rfS) rfS.value='off';
+    queueSave();
+    app.view3d.rebuild();
+    toast('Roof removed. Choose Roof: On to restore it.');
+  };
   const bpV=$('#bpVis'), bpO=$('#bpOp');
   app.syncBpUI=()=>{ const bp=app.state.blueprint;
     if(bpV) bpV.value=(bp&&bp.visible===false)?'off':'on';
