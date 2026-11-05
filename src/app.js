@@ -334,6 +334,18 @@ class App {
     }
   }
 
+  // Commit one wall drawn by dragging from an empty point to an endpoint.
+  commitWallSegment(a,b){
+    const length=Math.hypot(b.x-a.x,b.z-a.z);
+    if(length<0.2){ toast('Wall is too short. Drag farther to place it.'); return; }
+    this.pushUndo();
+    const fl=this.curFloor();
+    const h=this.state.settings.wallHeightDefault||fl.wallHeight||2.7;
+    const t=this.state.settings.wallThickness||0.15;
+    fl.walls.push({id:uid('w'),x1:+a.x.toFixed(3),z1:+a.z.toFixed(3),x2:+b.x.toFixed(3),z2:+b.z.toFixed(3),h,t,color:'#e8e4da'});
+    saveState(this.state); this.syncAll(); toast('Wall placed');
+  }
+
   // ---------- 2D taps ----------
   tap2D(x,z){
     const v=this.view2d;
@@ -1474,7 +1486,7 @@ app.refreshSelPanel=function(){
   // wall draft panel takes precedence
   if(v&&v.draft.length){
     p.classList.add('on');
-    p.innerHTML=`<h4>${icon('brick-wall')} Drawing wall (${v.draft.length} pts)</h4><div class="sub">Tap plan to add points. Snap ${(app.state.settings.snap*100)|0}cm.</div>
+    p.innerHTML=`<h4>${icon('brick-wall')} Drawing wall (${v.draft.length} pts)</h4><div class="sub">Tap points for connected wall sections, then Finish. Or drag on empty ground to place one wall. Snap ${(app.state.settings.snap*100)|0}cm.</div>
       <div class="rowBtns">
         <button class="btn primary" id="wDone">${icon('check')} Finish</button>
         <button class="btn" id="wUndoPt">⌫ Undo point</button>
