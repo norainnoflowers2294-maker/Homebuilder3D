@@ -164,6 +164,7 @@ export class View2D {
     this.cam={cx:0,cz:0,scale:60};
     this.showGrid=true;
     this.draft=[];
+    this.wallDragPreview=null;
     this.roomDraft=[];
     this.meas=[];
     this.preview=null;
@@ -248,6 +249,14 @@ export class View2D {
         this.app.tap2D(w.x,w.z);
       }
       if(this.pointers.size===0){
+        if(this._drag&&this._drag.kind==='wallcreate'){
+          const d=this._drag;
+          this.wallDragPreview=null;
+          if(e.type==='pointerup'&&this.moved){
+            this.app.commitWallSegment({x:d.x1,z:d.z1},{x:d.x2,z:d.z2});
+          }
+          this.request();
+        }
         if(this.moved&&this._drag&&(this._drag.kind==='item'||this._drag.kind==='wallmove'||this._drag.kind==='endpoint'||this._drag.kind==='zonemove'||this._drag.kind==='poolmove')) this.app.showCtxBar();
         if(this._drag&&this._drag.kind==='rect') this.app.finishRectTool(this._drag);
         this.downPos=null; this._drag=null; this.activeSnapGuide=null;
@@ -396,7 +405,13 @@ export class View2D {
               else {
                 const pl=this.hitPool(w0.x,w0.z);
                 if(pl){ this.app.select({type:'pool',id:pl.id,floor:this.app.state.activeFloor},{quiet:quietDrag}); this._drag={kind:'poolmove',id:pl.id,armed:true}; }
-                else this._drag={kind:'pan'};
+                else if(tool==='wall'){
+                  // A short tap still starts the multi-point wall tool. A real drag
+                  // on empty ground creates a single wall segment.
+                  if(!this.moved) return;
+                  const sx=this.snap(w0.x), sz=this.snap(w0.z);
+                  this._drag={kind:'wallcreate',x1:sx,z1:sz,x2:sx,z2:sz};
+                } else this._drag={kind:'pan'};
               }
             }
           }
@@ -407,6 +422,12 @@ export class View2D {
       if(!d) return;
       if(d.kind==='pan'){
         this.cam.cx-=dx/this.cam.scale; this.cam.cz-=dy/this.cam.scale; this.request(); return;
+      }
+      if(d.kind==='wallcreate'){
+        const p=this.s2w(e.clientX,e.clientY);
+        d.x2=this.snap(p.x); d.z2=this.snap(p.z);
+        this.wallDragPreview={x1:d.x1,z1:d.z1,x2:d.x2,z2:d.z2};
+        this.request(); return;
       }
 
       if(d.armed){ this.app.checkpoint(); d.armed=false; }
@@ -794,6 +815,23 @@ export class View2D {
         ctx.fillStyle='rgba(5,10,20,.9)'; ctx.beginPath(); rRect(ctx, sx+10,sy-30,tw+12,20,8); ctx.fill();
         ctx.fillStyle='#fff'; ctx.textAlign='left'; ctx.fillText(t,sx+16,sy-16);
       }
+    }
+
+    if(this.wallDragPreview){
+      const d=this.wallDragPreview;
+      const [x1,y1]=this.w2s(d.x1,d.z1), [x2,y2]=this.w2s(d.x2,d.z2);
+      const L=Math.hypot(d.x2-d.x1,d.z2-d.z1);
+      ctx.save();
+      ctx.strokeStyle='#b98a2e'; ctx.lineWidth=4; ctx.setLineDash([7,5]);
+      ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle='#b98a2e';
+      for(const [x,y] of [[x1,y1],[x2,y2]]){ ctx.beginPath(); ctx.arc(x,y,5,0,Math.PI*2); ctx.fill(); }
+      ctx.font='700 12px system-ui'; ctx.fillStyle='#0b111c';
+      const label=L.toFixed(2)+' m';
+      ctx.fillStyle='rgba(5,10,20,.9)'; ctx.beginPath(); rRect(ctx,x2+10,y2-28,ctx.measureText(label).width+16,20,8); ctx.fill();
+      ctx.fillStyle='#fff'; ctx.textAlign='left'; ctx.fillText(label,x2+18,y2-14);
+      ctx.restore();
     }
 
     if(this.roomDraft.length){
