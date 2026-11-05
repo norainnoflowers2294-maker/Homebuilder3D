@@ -89,14 +89,10 @@ export function demoState(){
 }
 
 export function blankState(){
+  // Start with an open building plot: no walls, doors, windows, or furniture.
+  // Keep a broad, plain ground slab so the user can build from a clean field.
   const f = defaultFloor('Ground Floor',0);
-  const x0=-5,x1=5,z0=-3.5,z1=3.5,t=0.15,h=2.7;
-  f.walls=[
-    {id:uid('w'),x1:x0,z1:z0,x2:x1,z2:z0,h,t,color:'#e8e4da'},
-    {id:uid('w'),x1:x1,z1:z0,x2:x1,z2:z1,h,t,color:'#e8e4da'},
-    {id:uid('w'),x1:x1,z1:z1,x2:x0,z2:z1,h,t,color:'#e8e4da'},
-    {id:uid('w'),x1:x0,z1:z1,x2:x0,z2:z0,h,t,color:'#e8e4da'},
-  ];
+  f.slab = { w:20, d:20, cx:0, cz:0, thick:0.25 };
   return { version:2, floors:[f], activeFloor:0,
     settings:{ snap:0.25, gridSize:30, wallThickness:0.15, wallHeightDefault:2.7, showAll3D:true, shadows:false } };
 }
