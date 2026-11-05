@@ -339,6 +339,23 @@ class App {
     const v=this.view2d;
     const sx=v.snap(x), sz=v.snap(z);
     if(this.tool==='wall'){
+      // In wall-building mode, existing wall segments can be selected and dragged.
+      // Tapping an endpoint starts a connected new wall; tapping empty ground starts freely.
+      if(!v.draft.length){
+        const endpoint=v.hitEndpoint(x,z,Math.max(0.3,18/v.cam.scale));
+        if(endpoint){
+          v.draft.push({x:sx,z:sz});
+          v.preview=null; v.request(); this.refreshSelPanel();
+          toast('Continue the new wall from this endpoint');
+          return;
+        }
+        const existingWall=v.hitWall(x,z);
+        if(existingWall){
+          this.select({type:'wall',id:existingWall.id,floor:this.state.activeFloor});
+          toast(existingWall.locked?'Wall selected. Unlock it to move.':'Wall selected. Drag it to move, or tap an endpoint to connect a new wall.');
+          return;
+        }
+      }
       v.draft.push({x:sx,z:sz});
       v.preview=null; v.request(); this.refreshSelPanel(); return;
     }
