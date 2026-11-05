@@ -320,6 +320,12 @@ export class View2D {
       for(const v of [w.x1,w.x2]) if(typeof v==='number'&&isFinite(v)){ minx=Math.min(minx,v); maxx=Math.max(maxx,v); }
       for(const v of [w.z1,w.z2]) if(typeof v==='number'&&isFinite(v)){ minz=Math.min(minz,v); maxz=Math.max(maxz,v); }
     }
+    // When a new house is empty, fit the camera to its plain ground plot
+    // instead of the generic fallback bounds so the whole build area is visible.
+    if(minx>maxx && fl?.slab){
+      const sl=fl.slab, cx=sl.cx||0, cz=sl.cz||0, w=sl.w||12, d=sl.d||10;
+      minx=cx-w/2; maxx=cx+w/2; minz=cz-d/2; maxz=cz+d/2;
+    }
     if(minx>maxx){ minx=-6;maxx=6;minz=-5;maxz=5; }
     const r=this.cv.getBoundingClientRect();
     const sx=r.width/(maxx-minx+3), sz=r.height/(maxz-minz+3);
